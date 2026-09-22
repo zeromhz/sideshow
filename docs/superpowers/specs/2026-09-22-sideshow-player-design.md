@@ -21,6 +21,7 @@ sub-project only:
 - Web UI
 - Persisting OSC-made changes back to config
 - MIDI input (VDMX handles MIDI and speaks OSC to the panels)
+- Scaled rendering (render below output resolution and upscale): added only if bring-up shows performance problems
 
 ## Decisions
 
@@ -42,7 +43,8 @@ One process, `sideshow-player`, per Pi.
 | Unit | Responsibility | Depends on |
 |---|---|---|
 | **Config** | Load and validate `/etc/sideshow/config.toml` into a plain struct | toml++ |
-| **Display** | SDL2 window + OpenGL ES 3 context. On the Pi: KMS/DRM fullscreen, no X/Wayland. On macOS: a normal window. Owns the frame loop (vsync, target 60 fps). | SDL2 |
+| **Display** | SDL2 window + OpenGL ES 3 context. On the Pi: KMS/DRM fullscreen, no X/Wayland. On macOS: a normal window. Picks the screen mode at startup (see Display resolution). Vsync on. | SDL2, DisplayMode picker |
+| **DisplayMode picker** | Pure logic: given the screen's mode list, its native mode, an optional explicit size, and a size cap, choose the mode to use. | none |
 | **AudioCapture** | SDL2 audio capture on its own callback thread; writes float PCM into a lock-free/mutexed ring buffer. Detects device loss and retries. | SDL2 |
 | **Renderer** | Owns the projectM instance. Each frame: drain ring buffer into `projectm_pcm_add_float`, render projectM (4.1.7 always draws to the default framebuffer), then a multiply-blend fullscreen pass that applies output brightness (master × blackout). | Display, AudioCapture, PresetManager, OutputLevel |
 | **PresetManager** | Wraps projectM's playlist library: playlist directories, shuffle, timed auto-advance, beat-triggered hard cuts, lock, next/prev/random/load-by-name, skip-and-remember failed presets. | Renderer's projectM handle |
@@ -122,6 +124,29 @@ Point a VDMX OSC output at the subnet broadcast address, port 9000, address
 `/sideshow/all/master`, range 0–1 float. If broadcast output isn't usable in
 VDMX, configure one output per panel IP — the `all` prefix works either way.
 
+## Display resolution
+
+At startup the player reads the screen's mode list (from its EDID) and its native mode:
+
+1. If `display.width`/`height` are set (> 0) and the screen supports that exact size, use it.
+   If not supported, log a warning and fall through to automatic selection.
+2. Automatic: use the native size if it fits within `max_width` × `max_height`
+   (default 2560×1440). Otherwise use the largest supported mode within the cap,
+   preferring the native aspect ratio (so a 4K TV runs at 1440p or 1080p).
+3. Among modes of the chosen size, prefer 50–60 Hz (60 over 50). Higher refresh
+   rates would make projectM render more frames than needed.
+4. If nothing fits the cap, use the native mode and log a warning.
+
+The chosen and native modes are logged. projectM renders at the output resolution.
+There is no scaled mode in v1; if bring-up shows low fps, first lower the cap
+(e.g. 1920×1080), then consider a scaled render mode as follow-up work.
+
+**No screen detected at boot:** SDL finds no connected display, the player logs
+it and exits non-zero, and systemd restarts it every 2 s. The next start after the
+screen appears picks up its real resolution. Most screens still report their
+resolution in standby, so this is rarely visible. No HDMI mode is forced on the
+kernel command line.
+
 ## Configuration
 
 `/etc/sideshow/config.toml` (example with defaults):
@@ -130,8 +155,10 @@ VDMX, configure one output per panel IP — the `all` prefix works either way.
 panel_id = "panel-01"          # set by install.sh --panel-id
 
 [display]
-width = 1920                   # 0 = use display's native mode
-height = 1080
+width = 0                      # 0 = automatic (see Display resolution); >0 = explicit mode
+height = 0
+max_width = 2560               # cap for automatic selection
+max_height = 1440
 fps = 60
 fullscreen = true              # false for windowed dev on macOS
 
@@ -184,7 +211,7 @@ Idempotent; runs on a fresh Raspberry Pi OS Lite install:
 5. Write `/etc/sideshow/config.toml` if absent (never overwrites an existing one).
 6. Create `sideshow` user, install and enable the systemd unit.
 7. `--panel-id panel-NN` sets `panel_id` and the hostname.
-8. Apply boot-quieting tweaks, disable the tty1 getty, and force HDMI on at 1080p60 (`video=HDMI-A-1:1920x1080@60D`) so a Pi booted before its screen still displays.
+8. Apply boot-quieting tweaks and disable the tty1 getty. No HDMI mode is forced (see Display resolution).
 
 Wi-Fi credentials and SSH are configured via Raspberry Pi Imager, not stored in
 this repo. A `pi-gen` golden image is a later step, not v1.
@@ -200,6 +227,7 @@ playlist. Custom playlists are extra directories under the preset root.
 
 | Failure | Behavior |
 |---|---|
+| No screen detected at boot | Log, exit non-zero; systemd restarts every 2 s until a screen appears |
 | Mic missing at boot / unplugged mid-show | Keep rendering on silence; retry opening the device every 3 s; log once per state change |
 | Preset fails to load | Skip to next, remember as bad for this session, log warning |
 | All presets in a playlist fail / playlist empty | Fall back to `default` playlist; if that fails, render projectM's idle preset |
@@ -218,6 +246,7 @@ sideshow/
 │   ├── main.cpp
 │   ├── config.{h,cpp}
 │   ├── display.{h,cpp}
+│   ├── display_mode.{h,cpp}
 │   ├── audio_capture.{h,cpp}
 │   ├── renderer.{h,cpp}
 │   ├── preset_manager.{h,cpp}
@@ -244,6 +273,7 @@ sideshow/
 - OSC parsing: both prefixes, wrong panel ID ignored, type leniency, clamping,
   unknown addresses → no command.
 - OutputLevel: smoothing converges, curve math, blackout interaction, startup value.
+- DisplayMode picker: native within cap, 4K stepping down, aspect preference, 60 Hz preference, nothing fits.
 - PresetManager logic against a temporary preset directory (playlist switching,
   missing names, bad-preset skipping) — logic separated from projectM calls
   behind a thin interface so it's testable without a GL context.
@@ -262,7 +292,7 @@ iteration; deploy to Pi for performance validation.
 
 1. A freshly imaged Pi 5 + `install.sh --panel-id panel-01` + reboot → fullscreen
    audio-reactive visuals with no keyboard, mouse, or network required.
-2. Sustains ~60 fps at 1080p on the curated preset set.
+2. Uses the screen's native resolution (capped at 2560×1440) and fps is measured at bring-up; if typical presets run well below 60 fps, lower the cap, then plan a scaled render mode.
 3. All OSC commands work from `osc_send.py` and from VDMX, individually and via broadcast.
 4. VDMX master fader smoothly fades output to black and back.
 5. Survives mic unplug, bad presets, malformed OSC, and process kill without manual intervention.

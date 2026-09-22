@@ -29,9 +29,10 @@
 | `src/audio_ring.{h,cpp}` | Thread-safe float ring buffer (audio thread → main) |
 | `src/config.{h,cpp}` | TOML config with per-key validation and defaults |
 | `src/preset_catalog.{h,cpp}` | Index of playlists (subdirs) and `.milk` files; bad-preset set |
+| `src/display_mode.{h,cpp}` | Choose the screen mode: explicit size, else native capped at max size, prefer 60 Hz |
 | `src/log.h` | Thread-safe stderr logging |
 | `src/gl.h` | Platform GL header selection |
-| `src/display.{h,cpp}` | SDL window + GL context (KMS/DRM on Pi) |
+| `src/display.{h,cpp}` | SDL window + GL context (KMS/DRM on Pi); applies the chosen mode |
 | `src/brightness_pass.{h,cpp}` | Multiply-blend fullscreen pass for master/blackout |
 | `src/renderer.{h,cpp}` | Owns projectM instance, PCM feed, render + brightness |
 | `src/audio_capture.{h,cpp}` | SDL capture device selection, callback, retry |
@@ -57,7 +58,7 @@ cmake --build build -j
 ./build/sideshow_tests                      # all unit tests
 ```
 
-Player build on the Mac (after Task 7):
+Player build on the Mac (after Task 8):
 
 ```bash
 cmake -S . -B build -DSIDESHOW_BUILD_PLAYER=ON -DCMAKE_PREFIX_PATH="$PWD/deps/install"
@@ -890,8 +891,10 @@ TEST_CASE("Config: empty text gives all defaults and no warnings") {
     ConfigResult r = parseConfig("");
     CHECK(r.warnings.empty());
     CHECK(r.config.panelId == "panel-01");
-    CHECK(r.config.display.width == 1920);
-    CHECK(r.config.display.height == 1080);
+    CHECK(r.config.display.width == 0);
+    CHECK(r.config.display.height == 0);
+    CHECK(r.config.display.maxWidth == 2560);
+    CHECK(r.config.display.maxHeight == 1440);
     CHECK(r.config.display.fps == 60);
     CHECK(r.config.display.fullscreen);
     CHECK(r.config.audio.device.empty());
@@ -915,8 +918,10 @@ TEST_CASE("Config: values override defaults") {
 panel_id = "panel-07"
 
 [display]
-width = 0
-height = 0
+width = 2560
+height = 1440
+max_width = 1920
+max_height = 1080
 fullscreen = false
 
 [audio]
@@ -939,7 +944,10 @@ master_smoothing_ms = 0
 )");
     CHECK(r.warnings.empty());
     CHECK(r.config.panelId == "panel-07");
-    CHECK(r.config.display.width == 0);
+    CHECK(r.config.display.width == 2560);
+    CHECK(r.config.display.height == 1440);
+    CHECK(r.config.display.maxWidth == 1920);
+    CHECK(r.config.display.maxHeight == 1080);
     CHECK_FALSE(r.config.display.fullscreen);
     CHECK(r.config.audio.device == "USB");
     CHECK(r.config.osc.port == 9100);
@@ -971,6 +979,8 @@ fps = 30
 TEST_CASE("Config: out-of-range values fall back to defaults") {
     ConfigResult r = parseConfig(R"(
 panel_id = "Panel 1!"
+[display]
+max_width = 10
 [osc]
 port = 70000
 [output]
@@ -979,6 +989,8 @@ master_default = 1.5
     CHECK(r.config.panelId == "panel-01");
     CHECK(r.config.osc.port == 9000);
     CHECK(r.config.output.masterDefault == 1.0f);
+    CHECK(r.config.display.maxWidth == 2560);
+    CHECK(hasWarningContaining(r, "display.max_width"));
     CHECK(hasWarningContaining(r, "panel_id"));
     CHECK(hasWarningContaining(r, "osc.port"));
     CHECK(hasWarningContaining(r, "output.master_default"));
@@ -1055,8 +1067,10 @@ struct Config {
     std::string panelId = "panel-01";
 
     struct Display {
-        int width = 1920;   // 0 = native mode
-        int height = 1080;  // 0 = native mode
+        int width = 0;         // 0 = automatic; >0 = explicit mode (if the screen supports it)
+        int height = 0;
+        int maxWidth = 2560;   // cap for automatic selection
+        int maxHeight = 1440;
         int fps = 60;
         bool fullscreen = true;
     } display;
@@ -1176,6 +1190,10 @@ ConfigResult parseConfig(std::string_view tomlText) {
 
     readKey(root, "display", "width", c.display.width, [](int v) { return v >= 0 && v <= 7680; }, w);
     readKey(root, "display", "height", c.display.height, [](int v) { return v >= 0 && v <= 4320; }, w);
+    readKey(root, "display", "max_width", c.display.maxWidth,
+            [](int v) { return v >= 320 && v <= 7680; }, w);
+    readKey(root, "display", "max_height", c.display.maxHeight,
+            [](int v) { return v >= 240 && v <= 4320; }, w);
     readKey(root, "display", "fps", c.display.fps, [](int v) { return v >= 1 && v <= 240; }, w);
     readKey(root, "display", "fullscreen", c.display.fullscreen, any, w);
 
@@ -1528,7 +1546,241 @@ git commit -m "feat: index playlists and presets with bad-preset exclusion"
 
 ---
 
-### Task 7: Dependency and preset scripts (macOS dev setup)
+### Task 7: Display mode picker
+
+**Files:**
+- Create: `src/display_mode.h`, `src/display_mode.cpp`, `tests/test_display_mode.cpp`
+- Modify: `CMakeLists.txt`
+
+- [ ] **Step 1: Write the failing test `tests/test_display_mode.cpp`**
+
+```cpp
+#include <catch2/catch_test_macros.hpp>
+
+#include "display_mode.h"
+
+using namespace sideshow;
+
+namespace {
+DisplayMode pickedMode(const std::vector<DisplayMode>& modes, const DisplayMode& native,
+                       int maxWidth = 2560, int maxHeight = 1440) {
+    auto index = pickAutoMode(modes, native, maxWidth, maxHeight);
+    REQUIRE(index);
+    return modes[*index];
+}
+}  // namespace
+
+TEST_CASE("Auto mode uses the native size when it fits the cap") {
+    const std::vector<DisplayMode> modes = {
+        {3840, 2160, 60}, {2560, 1440, 60}, {1920, 1080, 60}, {1280, 720, 60}};
+    DisplayMode m = pickedMode(modes, {2560, 1440, 60});
+    CHECK(m.width == 2560);
+    CHECK(m.height == 1440);
+
+    DisplayMode small = pickedMode(modes, {1920, 1080, 60});
+    CHECK(small.width == 1920);
+}
+
+TEST_CASE("Auto mode steps a 4K screen down to the largest mode within the cap") {
+    const std::vector<DisplayMode> modes = {
+        {3840, 2160, 60}, {2560, 1440, 60}, {1920, 1080, 60}};
+    DisplayMode m = pickedMode(modes, {3840, 2160, 60});
+    CHECK(m.width == 2560);
+    CHECK(m.height == 1440);
+
+    DisplayMode capped = pickedMode(modes, {3840, 2160, 60}, 1920, 1080);
+    CHECK(capped.width == 1920);
+}
+
+TEST_CASE("Auto mode prefers the native aspect ratio over a larger mode") {
+    // A 4K TV without 1440p: 1920x1200 is larger than 1920x1080 but 16:10.
+    const std::vector<DisplayMode> modes = {
+        {3840, 2160, 60}, {1920, 1200, 60}, {1920, 1080, 60}, {1280, 720, 60}};
+    DisplayMode m = pickedMode(modes, {3840, 2160, 60});
+    CHECK(m.width == 1920);
+    CHECK(m.height == 1080);
+}
+
+TEST_CASE("Auto mode prefers 60 Hz over higher or lower refresh rates") {
+    const std::vector<DisplayMode> highRefresh = {
+        {2560, 1440, 144}, {2560, 1440, 120}, {2560, 1440, 60}};
+    CHECK(pickedMode(highRefresh, {2560, 1440, 144}).refreshRate == 60);
+
+    const std::vector<DisplayMode> tv = {{1920, 1080, 24}, {1920, 1080, 50}, {1920, 1080, 60}};
+    CHECK(pickedMode(tv, {1920, 1080, 60}).refreshRate == 60);
+
+    const std::vector<DisplayMode> pal = {{1920, 1080, 24}, {1920, 1080, 50}};
+    CHECK(pickedMode(pal, {1920, 1080, 50}).refreshRate == 50);
+}
+
+TEST_CASE("Auto mode accepts unknown refresh rates") {
+    const std::vector<DisplayMode> modes = {{1920, 1080, 0}};
+    CHECK(pickedMode(modes, {1920, 1080, 0}).width == 1920);
+}
+
+TEST_CASE("Auto mode returns nothing when no mode fits the cap") {
+    const std::vector<DisplayMode> modes = {{3840, 2160, 60}, {3840, 2160, 30}};
+    CHECK_FALSE(pickAutoMode(modes, {3840, 2160, 60}, 2560, 1440));
+}
+
+TEST_CASE("Exact mode lookup finds the size with the best refresh rate") {
+    const std::vector<DisplayMode> modes = {
+        {2560, 1440, 144}, {2560, 1440, 60}, {1920, 1080, 60}};
+    auto index = findExactMode(modes, 2560, 1440);
+    REQUIRE(index);
+    CHECK(modes[*index].refreshRate == 60);
+    CHECK_FALSE(findExactMode(modes, 1234, 567));
+}
+```
+
+- [ ] **Step 2: Add sources to `CMakeLists.txt`**
+
+```cmake
+add_library(sideshow_core STATIC
+    src/output_level.cpp
+    src/osc_parse.cpp
+    src/audio_ring.cpp
+    src/config.cpp
+    src/preset_catalog.cpp
+    src/display_mode.cpp
+)
+```
+
+```cmake
+    add_executable(sideshow_tests
+        tests/test_output_level.cpp
+        tests/test_command_queue.cpp
+        tests/test_osc_parse.cpp
+        tests/test_audio_ring.cpp
+        tests/test_config.cpp
+        tests/test_preset_catalog.cpp
+        tests/test_display_mode.cpp
+    )
+```
+
+- [ ] **Step 3: Run the build and confirm it fails**
+
+Run: `cmake -S . -B build && cmake --build build -j`
+Expected: FAIL: `display_mode.h: No such file or directory`.
+
+- [ ] **Step 4: Implement `src/display_mode.h`**
+
+```cpp
+#pragma once
+
+#include <cstddef>
+#include <optional>
+#include <vector>
+
+namespace sideshow {
+
+struct DisplayMode {
+    int width;
+    int height;
+    int refreshRate;  // Hz; 0 = unknown
+};
+
+// Index of the mode with exactly width x height and the best refresh rate, if any.
+std::optional<size_t> findExactMode(const std::vector<DisplayMode>& modes, int width, int height);
+
+// Automatic choice: the native size if it fits within maxWidth x maxHeight, otherwise the
+// largest mode that fits, preferring the native aspect ratio. Among modes of the chosen size,
+// 50-60 Hz is preferred (60 over 50). Returns nullopt if no mode fits the cap.
+std::optional<size_t> pickAutoMode(const std::vector<DisplayMode>& modes, const DisplayMode& native,
+                                   int maxWidth, int maxHeight);
+
+}  // namespace sideshow
+```
+
+- [ ] **Step 5: Implement `src/display_mode.cpp`**
+
+```cpp
+#include "display_mode.h"
+
+#include <cmath>
+
+namespace sideshow {
+namespace {
+
+// Lower is better. projectM renders once per vsync, so >60 Hz costs GPU for no benefit.
+int refreshPenalty(int hz) {
+    if (hz == 0) return 0;                     // unknown: assume fine
+    if (hz >= 50 && hz <= 61) return 61 - hz;  // prefer 60 over 50
+    if (hz > 61) return 100 + hz;
+    return 200 + (50 - hz);
+}
+
+bool sameAspect(const DisplayMode& a, const DisplayMode& b) {
+    if (a.height == 0 || b.height == 0) return false;
+    const double ra = static_cast<double>(a.width) / a.height;
+    const double rb = static_cast<double>(b.width) / b.height;
+    return std::abs(ra - rb) / rb < 0.01;
+}
+
+bool fits(const DisplayMode& m, int maxWidth, int maxHeight) {
+    return m.width <= maxWidth && m.height <= maxHeight;
+}
+
+}  // namespace
+
+std::optional<size_t> findExactMode(const std::vector<DisplayMode>& modes, int width, int height) {
+    std::optional<size_t> best;
+    for (size_t i = 0; i < modes.size(); ++i) {
+        if (modes[i].width != width || modes[i].height != height) continue;
+        if (!best || refreshPenalty(modes[i].refreshRate) < refreshPenalty(modes[*best].refreshRate)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+std::optional<size_t> pickAutoMode(const std::vector<DisplayMode>& modes, const DisplayMode& native,
+                                   int maxWidth, int maxHeight) {
+    if (fits(native, maxWidth, maxHeight)) {
+        if (auto index = findExactMode(modes, native.width, native.height)) return index;
+    }
+
+    std::optional<size_t> bestSize;
+    for (size_t i = 0; i < modes.size(); ++i) {
+        const DisplayMode& m = modes[i];
+        if (!fits(m, maxWidth, maxHeight)) continue;
+        if (!bestSize) {
+            bestSize = i;
+            continue;
+        }
+        const DisplayMode& b = modes[*bestSize];
+        const bool mAspect = sameAspect(m, native);
+        const bool bAspect = sameAspect(b, native);
+        if (mAspect != bAspect) {
+            if (mAspect) bestSize = i;
+            continue;
+        }
+        if (static_cast<long>(m.width) * m.height > static_cast<long>(b.width) * b.height) {
+            bestSize = i;
+        }
+    }
+    if (!bestSize) return std::nullopt;
+    return findExactMode(modes, modes[*bestSize].width, modes[*bestSize].height);
+}
+
+}  // namespace sideshow
+```
+
+- [ ] **Step 6: Build and run the tests**
+
+Run: `cmake --build build -j && ./build/sideshow_tests`
+Expected: `All tests passed`
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add src/display_mode.h src/display_mode.cpp tests/test_display_mode.cpp CMakeLists.txt
+git commit -m "feat: pick display mode from native size with a resolution cap"
+```
+
+---
+
+### Task 8: Dependency and preset scripts (macOS dev setup)
 
 **Files:**
 - Create: `setup/build_projectm.sh`, `setup/fetch_presets.sh`, `setup/dev-macos.sh`, `setup/config.dev.toml`
@@ -1696,7 +1948,7 @@ git commit -m "build: add projectM build, preset fetch, and macOS dev setup scri
 
 ---
 
-### Task 8: Display window + minimal player
+### Task 9: Display window + minimal player
 
 **Files:**
 - Create: `src/log.h`, `src/gl.h`, `src/display.h`, `src/display.cpp`, `src/main.cpp`
@@ -1781,18 +2033,71 @@ private:
 }  // namespace sideshow
 ```
 
-- [ ] **Step 4: Create `src/display.cpp`**
+- [ ] **Step 4: Create `src/display.cpp`** (in fullscreen, picks the screen mode with `display_mode.h`; windowed dev mode just opens a window)
 
 ```cpp
 #include "display.h"
 
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
+#include "display_mode.h"
 #include "gl.h"
 #include "log.h"
 
 namespace sideshow {
+namespace {
+
+std::string describe(const DisplayMode& m) {
+    return std::to_string(m.width) + "x" + std::to_string(m.height) + "@" +
+           std::to_string(m.refreshRate) + "Hz";
+}
+
+// Reads the screen's modes (from EDID) and picks one per config: explicit size if the screen
+// supports it, else the native size capped at max_width x max_height.
+SDL_DisplayMode chooseFullscreenMode(const Config::Display& config) {
+    if (SDL_GetNumVideoDisplays() < 1) {
+        throw std::runtime_error("no connected display (systemd will retry)");
+    }
+    SDL_DisplayMode native{};
+    if (SDL_GetDesktopDisplayMode(0, &native) != 0) {
+        throw std::runtime_error(std::string("cannot read display mode: ") + SDL_GetError());
+    }
+    const DisplayMode nativeInfo{native.w, native.h, native.refresh_rate};
+
+    std::vector<SDL_DisplayMode> sdlModes;
+    std::vector<DisplayMode> modes;
+    const int count = SDL_GetNumDisplayModes(0);
+    for (int i = 0; i < count; ++i) {
+        SDL_DisplayMode m{};
+        if (SDL_GetDisplayMode(0, i, &m) == 0) {
+            sdlModes.push_back(m);
+            modes.push_back({m.w, m.h, m.refresh_rate});
+        }
+    }
+
+    std::optional<size_t> pick;
+    if (config.width > 0 && config.height > 0) {
+        pick = findExactMode(modes, config.width, config.height);
+        if (!pick) {
+            logWarn("display mode " + std::to_string(config.width) + "x" +
+                    std::to_string(config.height) +
+                    " not supported by this screen; choosing automatically");
+        }
+    }
+    if (!pick) pick = pickAutoMode(modes, nativeInfo, config.maxWidth, config.maxHeight);
+    if (!pick) {
+        logWarn("no display mode fits within " + std::to_string(config.maxWidth) + "x" +
+                std::to_string(config.maxHeight) + "; using native " + describe(nativeInfo));
+        return native;
+    }
+    logInfo("screen native " + describe(nativeInfo) + ", using " + describe(modes[*pick]));
+    return sdlModes[*pick];
+}
+
+}  // namespace
 
 Display::Display(const Config::Display& config) {
 #ifdef SIDESHOW_GLES
@@ -1807,12 +2112,15 @@ Display::Display(const Config::Display& config) {
 #endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
-    const bool fixedMode = config.width > 0 && config.height > 0;
-    const int width = fixedMode ? config.width : 1280;
-    const int height = fixedMode ? config.height : 720;
     Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    int width = config.width > 0 ? config.width : 1280;  // windowed size (dev)
+    int height = config.height > 0 ? config.height : 720;
+    SDL_DisplayMode mode{};
     if (config.fullscreen) {
-        flags |= fixedMode ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP;
+        mode = chooseFullscreenMode(config);
+        width = mode.w;
+        height = mode.h;
+        flags |= SDL_WINDOW_FULLSCREEN;
     } else {
         flags |= SDL_WINDOW_RESIZABLE;
     }
@@ -1821,6 +2129,9 @@ Display::Display(const Config::Display& config) {
                                width, height, flags);
     if (!window_) {
         throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
+    }
+    if (config.fullscreen && SDL_SetWindowDisplayMode(window_, &mode) != 0) {
+        logWarn(std::string("SDL_SetWindowDisplayMode failed: ") + SDL_GetError());
     }
     context_ = SDL_GL_CreateContext(window_);
     if (!context_) {
@@ -1898,7 +2209,8 @@ int main(int argc, char** argv) {
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
-        logError(std::string("SDL_Init failed: ") + SDL_GetError());
+        logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
+                 SDL_GetError());
         return 1;
     }
 
@@ -1978,7 +2290,7 @@ git commit -m "feat: open SDL/GL display in sideshow-player"
 
 ---
 
-### Task 9: projectM rendering, brightness pass, and audio capture
+### Task 10: projectM rendering, brightness pass, and audio capture
 
 **Files:**
 - Create: `src/brightness_pass.h`, `src/brightness_pass.cpp`, `src/renderer.h`, `src/renderer.cpp`, `src/audio_capture.h`, `src/audio_capture.cpp`
@@ -2402,7 +2714,8 @@ int main(int argc, char** argv) {
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
-        logError(std::string("SDL_Init failed: ") + SDL_GetError());
+        logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
+                 SDL_GetError());
         return 1;
     }
 
@@ -2506,7 +2819,7 @@ git commit -m "feat: render audio-reactive projectM with brightness pass and mic
 
 ---
 
-### Task 10: PresetManager (playlists)
+### Task 11: PresetManager (playlists)
 
 **Files:**
 - Create: `src/preset_manager.h`, `src/preset_manager.cpp`
@@ -2732,7 +3045,7 @@ git commit -m "feat: play preset playlists with fallback and bad-preset skipping
 
 ---
 
-### Task 11: OSC server, command dispatch, ping/pong
+### Task 12: OSC server, command dispatch, ping/pong
 
 **Files:**
 - Create: `src/osc_server.h`, `src/osc_server.cpp`
@@ -2961,7 +3274,8 @@ int main(int argc, char** argv) {
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
-        logError(std::string("SDL_Init failed: ") + SDL_GetError());
+        logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
+                 SDL_GetError());
         return 1;
     }
 
@@ -3073,7 +3387,7 @@ cmake -S . -B build -DSIDESHOW_BUILD_PLAYER=ON -DCMAKE_PREFIX_PATH="$PWD/deps/in
 cmake --build build -j
 SIDESHOW_DEBUG=1 ./build/sideshow-player --config setup/config.dev.toml
 ```
-Expected: `[info] OSC: listening on UDP 9000 for /sideshow/all/* and /sideshow/dev/*`. Keep it running for Task 12, which adds the CLI used to check every command.
+Expected: `[info] OSC: listening on UDP 9000 for /sideshow/all/* and /sideshow/dev/*`. Keep it running for Task 13, which adds the CLI used to check every command.
 
 - [ ] **Step 6: Commit**
 
@@ -3084,7 +3398,7 @@ git commit -m "feat: accept OSC control with ping/pong status"
 
 ---
 
-### Task 12: `tools/osc_send.py` + end-to-end OSC check
+### Task 13: `tools/osc_send.py` + end-to-end OSC check
 
 **Files:**
 - Create: `tools/osc_send.py`, `tools/test_osc_send.py`
@@ -3261,7 +3575,7 @@ if __name__ == "__main__":
 Run: `chmod +x tools/osc_send.py && python3 -m unittest discover -s tools -v`
 Expected: `Ran 5 tests … OK`
 
-- [ ] **Step 5: End-to-end check against the running player (from Task 11 Step 5)**
+- [ ] **Step 5: End-to-end check against the running player (from Task 12 Step 5)**
 
 With `SIDESHOW_DEBUG=1 ./build/sideshow-player --config setup/config.dev.toml` running, send each command in turn and watch the window and the log:
 
@@ -3301,7 +3615,7 @@ git commit -m "feat: add dependency-free OSC CLI for testing and soundcheck"
 
 ---
 
-### Task 13: Raspberry Pi provisioning (config template, systemd unit, install script)
+### Task 14: Raspberry Pi provisioning (config template, systemd unit, install script)
 
 **Files:**
 - Create: `setup/config.example.toml`, `setup/sideshow-player.service`, `setup/install.sh`
@@ -3315,8 +3629,10 @@ git commit -m "feat: add dependency-free OSC CLI for testing and soundcheck"
 panel_id = "panel-01"          # [a-z0-9-]; set by install.sh --panel-id
 
 [display]
-width = 1920                   # 0 = use the display's native mode
-height = 1080
+width = 0                      # 0 = automatic: the screen's native mode, capped below
+height = 0                     # set both (e.g. 1920 x 1080) to force a mode
+max_width = 2560               # automatic mode never exceeds this (4K screens step down)
+max_height = 1440
 fps = 60
 fullscreen = true
 
@@ -3447,8 +3763,7 @@ systemctl disable getty@tty1.service || true   # no login prompt flashing on the
 
 echo "==> Quieting boot"
 sed -i 's/console=tty1/console=tty3/' "$CMDLINE"
-for option in quiet logo.nologo vt.global_cursor_default=0 consoleblank=0 \
-              video=HDMI-A-1:1920x1080@60D; do
+for option in quiet logo.nologo vt.global_cursor_default=0 consoleblank=0; do
     grep -qw -- "$option" "$CMDLINE" || sed -i "1 s|\$| $option|" "$CMDLINE"
 done
 grep -q '^disable_splash=1' "$BOOTCONFIG" || echo 'disable_splash=1' >> "$BOOTCONFIG"
@@ -3472,7 +3787,7 @@ git commit -m "build: add Pi provisioning script, systemd unit, and config templ
 
 ---
 
-### Task 14: README
+### Task 15: README
 
 **Files:**
 - Create: `README.md`
@@ -3512,8 +3827,12 @@ sudo nano /etc/sideshow/config.toml       # settings (restart to apply)
 ```
 
 Notes:
-- The HDMI output is forced on at 1080p60 (`video=HDMI-A-1:1920x1080@60D` in
-  `/boot/firmware/cmdline.txt`) so the Pi can boot before the screen is powered.
+- Resolution is automatic: the player uses the screen's native mode, capped at 2560×1440
+  (a 4K screen steps down to 1440p or 1080p), preferring 60 Hz. The chosen mode is logged
+  (`screen native …, using …`). Change `max_width`/`max_height`, or set `width`/`height`, in
+  the config to override.
+- If no screen is detected at boot, the player exits and systemd retries every 2 s, so visuals
+  appear shortly after the screen is powered on.
 - The tty1 login prompt is disabled; use SSH.
 
 ## OSC control
@@ -3590,7 +3909,8 @@ Run this on each new panel, and after any significant change:
 - [ ] Unplug the mic: visuals keep running (on silence). Replug: reaction returns within ~3 s
 - [ ] `sudo pkill -9 sideshow-player`: visuals return within ~3 s
 - [ ] Pull the power and restore it: visuals come back on their own
-- [ ] Boot with the screen off, then turn it on: visuals show
+- [ ] Boot with the screen off, then turn it on: visuals show within a few seconds, at the right resolution
+- [ ] The log line `screen native …, using …` shows the expected mode
 ````
 
 - [ ] **Step 2: Commit**
@@ -3602,7 +3922,7 @@ git commit -m "docs: add README with Pi setup, OSC reference, VDMX, and smoke ch
 
 ---
 
-### Task 15: First Pi bring-up (manual, on hardware)
+### Task 16: First Pi bring-up (manual, on hardware)
 
 This needs a Pi 5 with a USB mic and a screen. Do it with the user.
 
@@ -3613,10 +3933,10 @@ This needs a Pi 5 with a USB mic and a screen. Do it with the user.
 - [ ] **Step 3: Reboot and watch the logs**
 
 Run (over SSH): `journalctl -u sideshow-player -f`
-Expected: `display 1920x1080, OpenGL ES 3.1 …`, `projectM 4.1.7`, `audio capture: '<USB mic name>' …`, `playlist 'default' (9795 presets)`, `OSC: listening on UDP 9000 …`.
+Expected: `screen native <W>x<H>@60Hz, using <W>x<H>@60Hz`, `display <W>x<H>, OpenGL ES 3.1 …`, `projectM 4.1.7`, `audio capture: '<USB mic name>' …`, `playlist 'default' (9795 presets)`, `OSC: listening on UDP 9000 …`.
 
 - [ ] **Step 4: Run the README smoke checklist.** Record each item's result and fps in the commit message.
 
-- [ ] **Step 5: If fps is below ~55 at 1080p,** first try `width = 1280` / `height = 720` in `/etc/sideshow/config.toml` (SDL will set that HDMI mode). Then note any presets that are consistently slow, as candidates for a curated `stage` playlist. Report the findings to the user before changing code.
+- [ ] **Step 5: If fps is below ~55,** note the chosen mode from the log, then try lowering the cap (`max_width = 1920`, `max_height = 1080`) in `/etc/sideshow/config.toml` and restart. A scaled render mode (render below output resolution) is agreed follow-up work if the cap alone isn't enough. Then note any presets that are consistently slow, as candidates for a curated `stage` playlist. Report the findings to the user before changing code.
 
 - [ ] **Step 6: Commit any fixes found during bring-up** with messages describing the hardware behavior they address.
