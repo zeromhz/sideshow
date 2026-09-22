@@ -49,6 +49,7 @@ private:
     bool lastLoadFailed_ = false;             // set by onFailed, consumed by onSwitched/loadPreset
     std::optional<unsigned int> failedIndex_;  // playlist item to remove and skip in tick()
     int consecutiveFailures_ = 0;
+    bool goingBack_ = false;  // prev() in progress: skip failures backwards
     std::mt19937 rng_{std::random_device{}()};
 };
 

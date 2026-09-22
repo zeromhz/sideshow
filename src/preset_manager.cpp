@@ -50,6 +50,7 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     consecutiveFailures_ = 0;
     logInfo("playlist '" + name + "' (" + std::to_string(files.size()) + " presets)");
     lastLoadFailed_ = false;
+    goingBack_ = false;
     if (projectm_playlist_get_shuffle(playlist_)) {
         projectm_playlist_play_next(playlist_, false);
     } else {
@@ -60,11 +61,13 @@ bool PresetManager::switchPlaylist(const std::string& name) {
 
 void PresetManager::next() {
     lastLoadFailed_ = false;
+    goingBack_ = false;
     projectm_playlist_play_next(playlist_, false);
 }
 
 void PresetManager::prev() {
     lastLoadFailed_ = false;
+    goingBack_ = true;
     projectm_playlist_play_previous(playlist_, false);
 }
 
@@ -73,6 +76,7 @@ void PresetManager::random() {
     if (size == 0) return;
     std::uniform_int_distribution<uint32_t> pick(0, size - 1);
     lastLoadFailed_ = false;
+    goingBack_ = false;
     projectm_playlist_set_position(playlist_, pick(rng_), false);
 }
 
@@ -119,10 +123,12 @@ void PresetManager::tick() {
         // No usable 'default': keep pruning this playlist instead.
     }
     lastLoadFailed_ = false;
-    // Removal shifted the following item into `index` (or wrap to the start), so
-    // play it directly rather than advancing past it; shuffle just picks another.
+    // Removal shifted the following item into `index`, so play that one (wrapping) when
+    // going forward, or the one before it after prev(); shuffle just picks another.
     if (projectm_playlist_get_shuffle(playlist_)) {
         projectm_playlist_play_next(playlist_, false);
+    } else if (goingBack_) {
+        projectm_playlist_set_position(playlist_, index == 0 ? size - 1 : index - 1, false);
     } else {
         projectm_playlist_set_position(playlist_, index < size ? index : 0, false);
     }
@@ -137,6 +143,7 @@ void PresetManager::onSwitched(bool /*isHardCut*/, unsigned int index, void* use
         return;
     }
     self->consecutiveFailures_ = 0;
+    self->goingBack_ = false;
     char* item = projectm_playlist_item(self->playlist_, index);
     if (item) {
         self->presetName_ = filenameOf(item);
