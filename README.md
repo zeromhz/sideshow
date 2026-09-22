@@ -84,10 +84,18 @@ instead, set `master_curve = 1.0` in each panel's config.
 ## Playlists
 
 Each directory (or symlink) under `/opt/sideshow/presets` is a playlist. The install creates
-`default` (the full ~9,800-preset "Cream of the Crop" pack) and one per pack category (`dancer`,
-`drawing`, `fractal`, `geometric`, `hypnotic`, `particles`, `reaction`, `sparkle`, `supernova`,
-`waveform`). To make a curated playlist, create a directory and symlink or copy `.milk` files
-into it, then restart the player.
+`default` (the full [projectM-presets-rpi5](https://github.com/mickabrig7/projectM-presets-rpi5)
+pack, 7,998 presets — a set filtered by the pack author to those that averaged ≥24 fps on a Pi 5
+with projectMSDL's benchmark) plus one playlist per sub-pack: `dancer`, `drawing`, `fractal`,
+`geometric`, `hypnotic`, `particles`, `reaction`, `sparkle`, `supernova`, `waveform` (the
+"creamofthecrop" categories), `isosceles` (isoscelesmashup), `bltc`, and `en-d`. To make a
+curated playlist, create a directory and symlink or copy `.milk` files into it, then restart the
+player.
+
+The pack's ≥24 fps filter was measured on the author's own Pi 5 at an unstated resolution, so
+treat it as a starting point, not a guarantee — measure actual fps at bring-up with
+`tools/osc_send.py ping`, and expect a curated `stage` playlist of the fastest, most reliable
+presets to follow once that's done.
 
 ## Development (macOS)
 

@@ -15,7 +15,7 @@
 - projectM **v4.1.7** builds on macOS (desktop GL) and installs CMake packages `projectM4` (target `libprojectM::projectM`) and `projectM4Playlist` (target `libprojectM::playlist`). Clone with `--recurse-submodules` (vendored `projectm-eval`). GLES is `-DENABLE_GLES=ON` (Linux only).
 - In 4.1.7, `projectm_opengl_render_frame()` always draws to framebuffer 0 (no custom-FBO API). The master fader is therefore applied **after** projectM with a multiply-blend fullscreen triangle (`glBlendFunc(GL_ZERO, GL_SRC_ALPHA)`), not via our own FBO.
 - API signatures used: `projectm_pcm_add_float(h, const float*, unsigned count_per_channel, PROJECTM_STEREO)`, `projectm_pcm_get_max_samples()`, `projectm_set_texture_search_paths(h, const char**, size_t)` (searched recursively), `projectm_playlist_create(pm)` (auto-connects), `projectm_playlist_add_presets(pl, const char**, uint32_t, bool allow_duplicates)`, `projectm_playlist_set_position(pl, uint32_t, bool hard_cut)`, `projectm_playlist_play_next/previous(pl, bool hard_cut)`, `projectm_playlist_item(pl, idx)` + `projectm_playlist_free_string`, switched callback `(bool is_hard_cut, unsigned index, void*)`, failed callback `(const char* file, const char* msg, void*)` — never switch presets inside callbacks.
-- Preset pack: `projectM-visualizer/presets-cream-of-the-crop` @ `0180df21f5e0bd39b9060cc5de420ed2f1f9e509` (9,795 presets in category dirs: Dancer, Drawing, Fractal, Geometric, Hypnotic, Particles, Reaction, Sparkle, Supernova, Waveform, `! Transition`). Textures: `projectM-visualizer/presets-milkdrop-texture-pack` @ `6368812f27bc747b517218fbf89d21d59afce4d9`.
+- Preset pack: `mickabrig7/projectM-presets-rpi5` @ `60eaf82081cd247c466829a47713eeb19dc0d1fa` (7,998 presets: `presets/creamofthecrop` in category dirs Dancer, Drawing, Fractal, Geometric, Hypnotic, Particles, Reaction, Sparkle, Supernova, Waveform, `! Transition` (7,172); `presets/isoscelesmashup` (531); `presets/BLTC` (266); `presets/EnD` (29). Pi-5-filtered: kept if it averaged ≥24 fps on the author's Pi 5 (projectMSDL benchmark). Textures: its own `textures/` (71 files) plus `projectM-visualizer/presets-milkdrop-texture-pack` @ `6368812f27bc747b517218fbf89d21d59afce4d9`, copied into a real `textures/` directory (not a symlinked checkout, since projectM's texture search doesn't follow nested directory symlinks).
 - macOS dev box has Homebrew, CMake 4.x, and SDL2 (sdl2-compat) with CMake config; liblo must be installed with `brew install liblo`.
 
 ## File map
@@ -3032,7 +3032,7 @@ cmake -S . -B build -DSIDESHOW_BUILD_PLAYER=ON -DCMAKE_PREFIX_PATH="$PWD/deps/in
 cmake --build build -j
 ./build/sideshow-player --config setup/config.dev.toml
 ```
-Expected: `[info] playlist 'default' (9795 presets)`, then `[info] preset: <name>.milk` about every 15 s (the dev config's `duration`), with smooth 3 s blends between audio-reactive presets.
+Expected: `[info] playlist 'default' (7998 presets)`, then `[info] preset: <name>.milk` about every 15 s (the dev config's `duration`), with smooth 3 s blends between audio-reactive presets.
 
 Check the fallback too: set `playlist = "nope"` in `setup/config.dev.toml`, rerun, and confirm `[warn] playlist 'nope' missing or empty, falling back to 'default'`. Revert the change.
 
@@ -3878,10 +3878,10 @@ instead, set `master_curve = 1.0` in each panel's config.
 ## Playlists
 
 Each directory (or symlink) under `/opt/sideshow/presets` is a playlist. The install creates
-`default` (the full ~9,800-preset "Cream of the Crop" pack) and one per pack category (`dancer`,
-`drawing`, `fractal`, `geometric`, `hypnotic`, `particles`, `reaction`, `sparkle`, `supernova`,
-`waveform`). To make a curated playlist, create a directory and symlink or copy `.milk` files
-into it, then restart the player.
+`default` (the full projectM-presets-rpi5 pack, 7,998 presets) and one per sub-pack/category
+(`dancer`, `drawing`, `fractal`, `geometric`, `hypnotic`, `particles`, `reaction`, `sparkle`,
+`supernova`, `waveform`, `isosceles`, `bltc`, `en-d`). To make a curated playlist, create a
+directory and symlink or copy `.milk` files into it, then restart the player.
 
 ## Development (macOS)
 
@@ -3933,7 +3933,7 @@ This needs a Pi 5 with a USB mic and a screen. Do it with the user.
 - [ ] **Step 3: Reboot and watch the logs**
 
 Run (over SSH): `journalctl -u sideshow-player -f`
-Expected: `screen native <W>x<H>@60Hz, using <W>x<H>@60Hz`, `display <W>x<H>, OpenGL ES 3.1 …`, `projectM 4.1.7`, `audio capture: '<USB mic name>' …`, `playlist 'default' (9795 presets)`, `OSC: listening on UDP 9000 …`.
+Expected: `screen native <W>x<H>@60Hz, using <W>x<H>@60Hz`, `display <W>x<H>, OpenGL ES 3.1 …`, `projectM 4.1.7`, `audio capture: '<USB mic name>' …`, `playlist 'default' (7998 presets)`, `OSC: listening on UDP 9000 …`.
 
 - [ ] **Step 4: Run the README smoke checklist.** Record each item's result and fps in the commit message.
 

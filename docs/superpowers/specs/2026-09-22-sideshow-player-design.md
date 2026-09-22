@@ -218,10 +218,11 @@ this repo. A `pi-gen` golden image is a later step, not v1.
 
 ### Presets
 
-Presets come from projectM's "Cream of the Crop" pack (≈9,800 presets, already
-curated by the projectM team), pinned to a commit. `default` links to the whole
-pack; each pack category (fractal, hypnotic, waveform, …) becomes its own
-playlist. Custom playlists are extra directories under the preset root.
+Presets come from [projectM-presets-rpi5](https://github.com/mickabrig7/projectM-presets-rpi5)
+(7,998 presets, filtered by its author to those that averaged ≥24 fps on a Pi 5 running
+projectMSDL's benchmark), pinned to a commit. `default` links to the whole pack; each sub-pack
+and category (fractal, hypnotic, waveform, isosceles, bltc, en-d, …) becomes its own playlist.
+Custom playlists are extra directories under the preset root.
 
 ## Error handling
 
