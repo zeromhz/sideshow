@@ -3,6 +3,7 @@
 #include <projectM-4/playlist.h>
 #include <projectM-4/projectM.h>
 
+#include <optional>
 #include <random>
 #include <string>
 
@@ -11,6 +12,11 @@
 namespace sideshow {
 
 // Drives projectM's playlist library from the PresetCatalog. Main thread only.
+//
+// A preset that fails to load is marked bad in the catalog (for this session), removed
+// from the playlist and skipped on the next tick(). Too many failures in a row, or an
+// emptied playlist, fall back to "default"; if "default" is the problem, projectM keeps
+// whatever it is showing (its idle preset at worst).
 class PresetManager {
 public:
     PresetManager(projectm_handle projectm, PresetCatalog& catalog, bool shuffle);
@@ -24,8 +30,9 @@ public:
     void next();
     void prev();
     void random();
-    bool loadPreset(const std::string& name);  // false if not found in the catalog
+    bool loadPreset(const std::string& name);  // false if not found, known bad, or fails to load
     void setLocked(bool locked);
+    void tick();  // once per frame: skips past a preset that just failed to load
 
     const std::string& currentPlaylist() const { return playlistName_; }
     const std::string& currentPreset() const { return presetName_; }
@@ -39,6 +46,9 @@ private:
     PresetCatalog& catalog_;
     std::string playlistName_;
     std::string presetName_;
+    bool lastLoadFailed_ = false;             // set by onFailed, consumed by onSwitched/loadPreset
+    std::optional<unsigned int> failedIndex_;  // playlist item to remove and skip in tick()
+    int consecutiveFailures_ = 0;
     std::mt19937 rng_{std::random_device{}()};
 };
 

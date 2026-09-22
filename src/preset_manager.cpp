@@ -7,6 +7,9 @@
 
 namespace sideshow {
 namespace {
+// Consecutive load failures before giving up on the current playlist.
+constexpr int kMaxConsecutiveFailures = 10;
+
 std::string filenameOf(const std::string& path) {
     return std::filesystem::path(path).filename().string();
 }
@@ -15,6 +18,8 @@ std::string filenameOf(const std::string& path) {
 PresetManager::PresetManager(projectm_handle projectm, PresetCatalog& catalog, bool shuffle)
     : projectm_(projectm), playlist_(projectm_playlist_create(projectm)), catalog_(catalog) {
     projectm_playlist_set_shuffle(playlist_, shuffle);
+    // No internal retries: every failure reaches onFailed, and tick() does the skipping.
+    projectm_playlist_set_retry_count(playlist_, 0);
     projectm_playlist_set_preset_switched_event_callback(playlist_, &PresetManager::onSwitched, this);
     projectm_playlist_set_preset_switch_failed_event_callback(playlist_, &PresetManager::onFailed, this);
 }
@@ -23,8 +28,10 @@ PresetManager::~PresetManager() { projectm_playlist_destroy(playlist_); }
 
 void PresetManager::start(const std::string& name) {
     if (switchPlaylist(name)) return;
-    logWarn("playlist '" + name + "' missing or empty, falling back to 'default'");
-    if (name != "default" && switchPlaylist("default")) return;
+    if (name != "default") {
+        logWarn("playlist '" + name + "' missing or empty, falling back to 'default'");
+        if (switchPlaylist("default")) return;
+    }
     logError("no usable playlist under the preset root; showing projectM's idle preset");
 }
 
@@ -39,6 +46,8 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     projectm_playlist_clear(playlist_);
     projectm_playlist_add_presets(playlist_, paths.data(), static_cast<uint32_t>(paths.size()), false);
     playlistName_ = name;
+    failedIndex_.reset();
+    consecutiveFailures_ = 0;
     logInfo("playlist '" + name + "' (" + std::to_string(files.size()) + " presets)");
     projectm_playlist_play_next(playlist_, false);
     return true;
@@ -57,8 +66,13 @@ void PresetManager::random() {
 
 bool PresetManager::loadPreset(const std::string& name) {
     const auto path = catalog_.findPreset(name);
-    if (!path) return false;
+    if (!path || catalog_.isBad(*path)) return false;
+    // Not via the playlist, so no switched callback follows; a failure only reaches onFailed.
     projectm_load_preset_file(projectm_, path->c_str(), true);
+    if (lastLoadFailed_) {
+        lastLoadFailed_ = false;  // projectM keeps the current preset
+        return false;
+    }
     presetName_ = filenameOf(*path);
     logInfo("preset: " + presetName_);
     return true;
@@ -69,8 +83,41 @@ void PresetManager::setLocked(bool locked) {
     logInfo(std::string("preset lock ") + (locked ? "on" : "off"));
 }
 
+void PresetManager::tick() {
+    if (!failedIndex_) return;
+    const unsigned int index = *failedIndex_;
+    failedIndex_.reset();
+    projectm_playlist_remove_preset(playlist_, index);
+
+    const uint32_t size = projectm_playlist_size(playlist_);
+    if (size == 0 || ++consecutiveFailures_ >= kMaxConsecutiveFailures) {
+        if (playlistName_ != "default") {
+            logWarn("giving up on playlist '" + playlistName_ +
+                    "' (broken presets), falling back to 'default'");
+            if (switchPlaylist("default")) return;
+        }
+        logError("no loadable presets left to try; keeping the current picture");
+        consecutiveFailures_ = 0;
+        return;
+    }
+    // Removal shifted the following item into `index` (or wrap to the start), so
+    // play it directly rather than advancing past it; shuffle just picks another.
+    if (projectm_playlist_get_shuffle(playlist_)) {
+        projectm_playlist_play_next(playlist_, false);
+    } else {
+        projectm_playlist_set_position(playlist_, index < size ? index : 0, false);
+    }
+}
+
 void PresetManager::onSwitched(bool /*isHardCut*/, unsigned int index, void* userData) {
     auto* self = static_cast<PresetManager*>(userData);
+    // The playlist reports the switch even when the load just failed (onFailed ran first).
+    if (self->lastLoadFailed_) {
+        self->lastLoadFailed_ = false;
+        self->failedIndex_ = index;
+        return;
+    }
+    self->consecutiveFailures_ = 0;
     char* item = projectm_playlist_item(self->playlist_, index);
     if (item) {
         self->presetName_ = filenameOf(item);
@@ -80,11 +127,12 @@ void PresetManager::onSwitched(bool /*isHardCut*/, unsigned int index, void* use
 }
 
 void PresetManager::onFailed(const char* presetFilename, const char* message, void* userData) {
-    // Do not switch presets here (projectM docs: may recurse). The playlist already skipped it.
+    // Must not switch presets here (projectM docs: may recurse); tick() skips it later.
     auto* self = static_cast<PresetManager*>(userData);
     const std::string file = presetFilename ? presetFilename : "";
     self->catalog_.markBad(file);
-    logWarn("preset failed, skipping for this session: " + filenameOf(file) + " (" +
+    self->lastLoadFailed_ = true;
+    logWarn("preset failed to load, skipping it for this session: " + filenameOf(file) + " (" +
             (message ? message : "") + ")");
 }
 

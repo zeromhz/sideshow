@@ -63,7 +63,9 @@ void applyCommand(const Command& command, PresetManager& presets, Renderer& rend
                 }
             },
             [&](const cmd::Preset& c) {
-                if (!presets.loadPreset(c.name)) logWarn("OSC: preset not found '" + c.name + "'");
+                if (!presets.loadPreset(c.name)) {
+                    logWarn("OSC: preset not found or broken '" + c.name + "'");
+                }
             },
             [&](const cmd::Blackout& c) { output.setBlackout(c.on); },
             [&](const cmd::Master& c) { output.setTarget(c.value); },
@@ -132,6 +134,7 @@ int main(int argc, char** argv) {
             }
 
             while (auto command = commands.pop()) applyCommand(*command, presets, renderer, output);
+            presets.tick();
 
             const Uint32 now = SDL_GetTicks();
             audio.tick(now);
