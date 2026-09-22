@@ -38,6 +38,7 @@ public:
     const std::string& currentPreset() const { return presetName_; }
 
 private:
+    void pruneBadPresets();  // removes playlist items the catalog has marked bad
     static void onSwitched(bool isHardCut, unsigned int index, void* userData);
     static void onFailed(const char* presetFilename, const char* message, void* userData);
 

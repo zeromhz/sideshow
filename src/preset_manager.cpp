@@ -88,6 +88,7 @@ bool PresetManager::loadPreset(const std::string& name) {
     projectm_load_preset_file(projectm_, path->c_str(), true);
     if (lastLoadFailed_) {
         lastLoadFailed_ = false;  // projectM keeps the current preset
+        pruneBadPresets();        // don't let the playlist reach it later
         return false;
     }
     presetName_ = filenameOf(*path);
@@ -131,6 +132,14 @@ void PresetManager::tick() {
         projectm_playlist_set_position(playlist_, index == 0 ? size - 1 : index - 1, false);
     } else {
         projectm_playlist_set_position(playlist_, index < size ? index : 0, false);
+    }
+}
+
+void PresetManager::pruneBadPresets() {
+    for (uint32_t i = projectm_playlist_size(playlist_); i-- > 0;) {
+        char* item = projectm_playlist_item(playlist_, i);
+        if (item && catalog_.isBad(item)) projectm_playlist_remove_preset(playlist_, i);
+        if (item) projectm_playlist_free_string(item);
     }
 }
 
