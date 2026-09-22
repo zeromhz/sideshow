@@ -1,0 +1,30 @@
+# Development config for macOS: windowed, presets from ./deps (see setup/dev-macos.sh).
+panel_id = "dev"
+
+[display]
+width = 1280
+height = 720
+fps = 60
+fullscreen = false
+
+[audio]
+device = ""
+sample_rate = 48000
+
+[osc]
+port = 9000
+
+[presets]
+root = "deps/presets"
+textures = "deps/textures"
+playlist = "default"
+duration = 15.0
+soft_cut_duration = 3.0
+hardcut_enabled = false
+beat_sensitivity = 1.0
+shuffle = true
+
+[output]
+master_default = 1.0
+master_curve = 2.0
+master_smoothing_ms = 50
