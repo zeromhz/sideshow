@@ -61,7 +61,7 @@ root = "deps/presets"
 playlist = "fractal"
 duration = 12
 hardcut_enabled = true
-beat_sensitivity = 2.5
+beat_sensitivity = 1.5
 shuffle = false
 
 [output]
@@ -81,7 +81,7 @@ master_smoothing_ms = 0
     CHECK(r.config.presets.playlist == "fractal");
     CHECK(r.config.presets.duration == 12.0);  // integer accepted for a float key
     CHECK(r.config.presets.hardcutEnabled);
-    CHECK(r.config.presets.beatSensitivity == 2.5f);
+    CHECK(r.config.presets.beatSensitivity == 1.5f);
     CHECK_FALSE(r.config.presets.shuffle);
     CHECK(r.config.output.masterCurve == 1.0f);
     CHECK(r.config.output.masterSmoothingMs == 0.0f);
@@ -109,17 +109,21 @@ panel_id = "Panel 1!"
 max_width = 10
 [osc]
 port = 70000
+[presets]
+beat_sensitivity = 2.5
 [output]
 master_default = 1.5
 )");
     CHECK(r.config.panelId == "panel-01");
     CHECK(r.config.osc.port == 9000);
     CHECK(r.config.output.masterDefault == 1.0f);
+    CHECK(r.config.presets.beatSensitivity == 1.0f);
     CHECK(r.config.display.maxWidth == 2560);
     CHECK(hasWarningContaining(r, "display.max_width"));
     CHECK(hasWarningContaining(r, "panel_id"));
     CHECK(hasWarningContaining(r, "osc.port"));
     CHECK(hasWarningContaining(r, "output.master_default"));
+    CHECK(hasWarningContaining(r, "presets.beat_sensitivity"));
 }
 
 TEST_CASE("Config: unparseable TOML gives defaults and a warning") {

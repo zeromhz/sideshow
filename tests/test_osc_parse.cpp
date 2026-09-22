@@ -86,7 +86,7 @@ TEST_CASE("OSC: duration and beat sensitivity are clamped") {
 
     auto beat = parse("/sideshow/all/beat_sensitivity", {9.0f});
     REQUIRE(beat);
-    CHECK(std::get<cmd::BeatSensitivity>(*beat).value == 5.0f);
+    CHECK(std::get<cmd::BeatSensitivity>(*beat).value == 2.0f);
 }
 
 TEST_CASE("OSC: playlist and preset need a non-empty string") {

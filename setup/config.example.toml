@@ -25,7 +25,7 @@ playlist = "default"
 duration = 30.0                # seconds per preset
 soft_cut_duration = 3.0        # blend time between presets
 hardcut_enabled = false        # beat-triggered abrupt cuts
-beat_sensitivity = 1.0         # 0..5
+beat_sensitivity = 1.0         # 0..2
 shuffle = true
 
 [output]

@@ -513,7 +513,7 @@ TEST_CASE("OSC: duration and beat sensitivity are clamped") {
 
     auto beat = parse("/sideshow/all/beat_sensitivity", {9.0f});
     REQUIRE(beat);
-    CHECK(std::get<cmd::BeatSensitivity>(*beat).value == 5.0f);
+    CHECK(std::get<cmd::BeatSensitivity>(*beat).value == 2.0f);
 }
 
 TEST_CASE("OSC: playlist and preset need a non-empty string") {
@@ -649,7 +649,7 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
     } else if (name == "duration") {
         if (auto f = asFloat(arg)) return cmd::Duration{std::clamp(*f, 1.0f, 3600.0f)};
     } else if (name == "beat_sensitivity") {
-        if (auto f = asFloat(arg)) return cmd::BeatSensitivity{std::clamp(*f, 0.0f, 5.0f)};
+        if (auto f = asFloat(arg)) return cmd::BeatSensitivity{std::clamp(*f, 0.0f, 2.0f)};
     } else if (name == "playlist") {
         if (auto s = asNonEmptyString(arg)) return cmd::Playlist{*s};
     } else if (name == "preset") {
@@ -935,7 +935,7 @@ root = "deps/presets"
 playlist = "fractal"
 duration = 12
 hardcut_enabled = true
-beat_sensitivity = 2.5
+beat_sensitivity = 1.5
 shuffle = false
 
 [output]
@@ -955,7 +955,7 @@ master_smoothing_ms = 0
     CHECK(r.config.presets.playlist == "fractal");
     CHECK(r.config.presets.duration == 12.0);  // integer accepted for a float key
     CHECK(r.config.presets.hardcutEnabled);
-    CHECK(r.config.presets.beatSensitivity == 2.5f);
+    CHECK(r.config.presets.beatSensitivity == 1.5f);
     CHECK_FALSE(r.config.presets.shuffle);
     CHECK(r.config.output.masterCurve == 1.0f);
     CHECK(r.config.output.masterSmoothingMs == 0.0f);
@@ -1213,7 +1213,7 @@ ConfigResult parseConfig(std::string_view tomlText) {
             [](double v) { return v >= 0.0 && v <= 60.0; }, w);
     readKey(root, "presets", "hardcut_enabled", c.presets.hardcutEnabled, any, w);
     readKey(root, "presets", "beat_sensitivity", c.presets.beatSensitivity,
-            [](float v) { return v >= 0.0f && v <= 5.0f; }, w);
+            [](float v) { return v >= 0.0f && v <= 2.0f; }, w);  // projectM clamps to 0..2
     readKey(root, "presets", "shuffle", c.presets.shuffle, any, w);
 
     readKey(root, "output", "master_default", c.output.masterDefault,
@@ -3599,7 +3599,7 @@ tools/osc_send.py $H master 1.0
 tools/osc_send.py $H duration 5                    # presets now change every ~5 s
 tools/osc_send.py $H hardcut 1                     # abrupt beat-synced cuts on loud music
 tools/osc_send.py $H hardcut 0
-tools/osc_send.py $H beat_sensitivity 3
+tools/osc_send.py $H beat_sensitivity 1.5
 tools/osc_send.py $H --panel dev next              # own panel id: works
 tools/osc_send.py $H --panel panel-99 next         # other panel: nothing happens; debug log "OSC: ignored"
 ```
@@ -3650,7 +3650,7 @@ playlist = "default"
 duration = 30.0                # seconds per preset
 soft_cut_duration = 3.0        # blend time between presets
 hardcut_enabled = false        # beat-triggered abrupt cuts
-beat_sensitivity = 1.0         # 0..5
+beat_sensitivity = 1.0         # 0..2
 shuffle = true
 
 [output]
@@ -3850,7 +3850,7 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 | `blackout` | int 0/1 | Instant black (overrides master) |
 | `master` | float 0–1 | Output brightness (smoothed, curved) |
 | `duration` | float s | Seconds per preset (1–3600) |
-| `beat_sensitivity` | float | 0–5 |
+| `beat_sensitivity` | float | 0–2 |
 | `hardcut` | int 0/1 | Beat-triggered hard cuts |
 
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.

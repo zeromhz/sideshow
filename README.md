@@ -53,7 +53,7 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 | `blackout` | int 0/1 | Instant black (overrides master) |
 | `master` | float 0–1 | Output brightness (smoothed, curved) |
 | `duration` | float s | Seconds per preset (1–3600) |
-| `beat_sensitivity` | float | 0–5 |
+| `beat_sensitivity` | float | 0–2 |
 | `hardcut` | int 0/1 | Beat-triggered hard cuts |
 
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.

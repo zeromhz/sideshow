@@ -92,7 +92,7 @@ ConfigResult parseConfig(std::string_view tomlText) {
             [](double v) { return v >= 0.0 && v <= 60.0; }, w);
     readKey(root, "presets", "hardcut_enabled", c.presets.hardcutEnabled, any, w);
     readKey(root, "presets", "beat_sensitivity", c.presets.beatSensitivity,
-            [](float v) { return v >= 0.0f && v <= 5.0f; }, w);
+            [](float v) { return v >= 0.0f && v <= 2.0f; }, w);  // projectM clamps to 0..2
     readKey(root, "presets", "shuffle", c.presets.shuffle, any, w);
 
     readKey(root, "output", "master_default", c.output.masterDefault,

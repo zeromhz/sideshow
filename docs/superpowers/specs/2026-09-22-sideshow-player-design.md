@@ -93,7 +93,7 @@ lets apps supply a target framebuffer (4.1.7 does not). No camera code in v1.
 | `blackout` | int 0/1 | Instant black output; rendering and audio keep running |
 | `master` | float 0.0–1.0 | Output brightness target (smoothed, curved) |
 | `duration` | float seconds | Auto-advance interval |
-| `beat_sensitivity` | float | projectM beat sensitivity |
+| `beat_sensitivity` | float | projectM beat sensitivity, 0–2 |
 | `hardcut` | int 0/1 | Enable/disable beat-triggered hard cuts |
 
 Plus the global `/sideshow/ping` (no args): the panel replies to the sender's
