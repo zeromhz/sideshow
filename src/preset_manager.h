@@ -48,7 +48,8 @@ private:
     std::string playlistName_;
     std::string presetName_;
     bool lastLoadFailed_ = false;             // set by onFailed, consumed by onSwitched/loadPreset
-    std::optional<unsigned int> failedIndex_;  // playlist item to remove and skip in tick()
+    std::optional<unsigned int> failedIndex_;  // pending skip in tick(): the failed item's index
+    bool failedItemPresent_ = false;           // false once pruneBadPresets() removed it
     int consecutiveFailures_ = 0;
     bool goingBack_ = false;  // prev() in progress: skip failures backwards
     std::mt19937 rng_{std::random_device{}()};

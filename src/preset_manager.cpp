@@ -105,7 +105,7 @@ void PresetManager::tick() {
     if (!failedIndex_) return;
     const unsigned int index = *failedIndex_;
     failedIndex_.reset();
-    projectm_playlist_remove_preset(playlist_, index);
+    if (failedItemPresent_) projectm_playlist_remove_preset(playlist_, index);
 
     // Keep pruning and advancing until something loads: after a failed load projectM will
     // not request another switch by itself, so stopping early would freeze the picture.
@@ -138,7 +138,15 @@ void PresetManager::tick() {
 void PresetManager::pruneBadPresets() {
     for (uint32_t i = projectm_playlist_size(playlist_); i-- > 0;) {
         char* item = projectm_playlist_item(playlist_, i);
-        if (item && catalog_.isBad(item)) projectm_playlist_remove_preset(playlist_, i);
+        if (item && catalog_.isBad(item)) {
+            projectm_playlist_remove_preset(playlist_, i);
+            // Keep a pending skip pointing at the same item (or its successor if it went).
+            if (failedIndex_ && i < *failedIndex_) {
+                --*failedIndex_;
+            } else if (failedIndex_ && i == *failedIndex_) {
+                failedItemPresent_ = false;
+            }
+        }
         if (item) projectm_playlist_free_string(item);
     }
 }
@@ -149,8 +157,10 @@ void PresetManager::onSwitched(bool /*isHardCut*/, unsigned int index, void* use
     if (self->lastLoadFailed_) {
         self->lastLoadFailed_ = false;
         self->failedIndex_ = index;
+        self->failedItemPresent_ = true;
         return;
     }
+    self->failedIndex_.reset();  // a later switch this frame succeeded: nothing to skip
     self->consecutiveFailures_ = 0;
     self->goingBack_ = false;
     char* item = projectm_playlist_item(self->playlist_, index);
