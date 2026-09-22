@@ -35,6 +35,7 @@ if(SIDESHOW_BUILD_PLAYER)
     find_package(PkgConfig REQUIRED)
     find_package(projectM4 REQUIRED)
     find_package(projectM4Playlist REQUIRED)
+    pkg_check_modules(LIBLO REQUIRED IMPORTED_TARGET liblo)
 
     if(APPLE)
         find_package(OpenGL REQUIRED)
@@ -53,12 +54,13 @@ if(SIDESHOW_BUILD_PLAYER)
         src/renderer.cpp
         src/audio_capture.cpp
         src/preset_manager.cpp
+        src/osc_server.cpp
     )
     target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow-player PRIVATE
         sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
-        libprojectM::projectM libprojectM::playlist)
+        libprojectM::projectM libprojectM::playlist PkgConfig::LIBLO)
 endif()
 
 if(SIDESHOW_BUILD_TESTS)
