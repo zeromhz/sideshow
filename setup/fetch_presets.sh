@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
-# Fetch the projectM preset and texture packs at pinned commits and lay out playlists.
+# Fetch the projectM-presets-rpi5 preset pack and the milkdrop texture pack at
+# pinned commits, and lay out playlists.
 # Usage: setup/fetch_presets.sh <dest-dir>
 # Result:
-#   <dest>/packs/cream-of-the-crop   the preset pack
-#   <dest>/textures                  the texture pack
-#   <dest>/presets/default           symlink to the whole pack
-#   <dest>/presets/<category>        symlink per pack category (lowercase, spaces -> dashes)
-# Safe to re-run. Custom playlists: create more directories (or symlinks) under <dest>/presets.
+#   <dest>/packs/projectM-presets-rpi5    the preset pack
+#   <dest>/packs/milkdrop-texture-pack    the texture pack (source checkout)
+#   <dest>/textures                       real directory of texture files, copied
+#                                          from both packs (projectM does not
+#                                          follow nested directory symlinks)
+#   <dest>/presets/default                symlink to the whole rpi5 preset pack
+#   <dest>/presets/<category>             symlink per pack category (lowercase, spaces -> dashes)
+# Safe to re-run. Custom playlists: create more directories (or symlinks) under
+# <dest>/presets; a real directory there is never touched by this script.
 set -euo pipefail
 
 DEST="${1:?usage: fetch_presets.sh <dest-dir>}"
-PRESETS_REPO="https://github.com/projectM-visualizer/presets-cream-of-the-crop.git"
-PRESETS_COMMIT="0180df21f5e0bd39b9060cc5de420ed2f1f9e509"
+PRESETS_REPO="https://github.com/mickabrig7/projectM-presets-rpi5.git"
+PRESETS_COMMIT="60eaf82081cd247c466829a47713eeb19dc0d1fa"
 TEXTURES_REPO="https://github.com/projectM-visualizer/presets-milkdrop-texture-pack.git"
 TEXTURES_COMMIT="6368812f27bc747b517218fbf89d21d59afce4d9"
 
@@ -28,16 +33,49 @@ fetch_pinned() {
     git -C "$dir" checkout -q FETCH_HEAD
 }
 
-fetch_pinned "$PRESETS_REPO" "$PRESETS_COMMIT" "$DEST/packs/cream-of-the-crop"
-fetch_pinned "$TEXTURES_REPO" "$TEXTURES_COMMIT" "$DEST/textures"
+fetch_pinned "$PRESETS_REPO" "$PRESETS_COMMIT" "$DEST/packs/projectM-presets-rpi5"
+fetch_pinned "$TEXTURES_REPO" "$TEXTURES_COMMIT" "$DEST/packs/milkdrop-texture-pack"
+
+# Migrate away from the old layout: cream-of-the-crop pack, and textures as a
+# git checkout instead of a plain directory of copied files.
+if [[ -e "$DEST/textures/.git" ]]; then
+    rm -rf "$DEST/textures"
+fi
+rm -rf "$DEST/packs/cream-of-the-crop"
+
+# projectM's texture search is recursive but does not follow nested directory
+# symlinks, so <dest>/textures must be a real directory of real files.
+mkdir -p "$DEST/textures"
+# cp -n exits non-zero on macOS/BSD when it skips an existing file, even
+# though nothing went wrong; that's expected on a re-run, so don't let it
+# trip set -e.
+cp -Rn "$DEST/packs/milkdrop-texture-pack/textures"/. "$DEST/textures/" || true
+cp -Rn "$DEST/packs/projectM-presets-rpi5/textures"/. "$DEST/textures/" || true
 
 mkdir -p "$DEST/presets"
-ln -sfn ../packs/cream-of-the-crop "$DEST/presets/default"
-for category in "$DEST/packs/cream-of-the-crop"/*/; do
+
+# Rebuild playlist symlinks: remove only symlinks that point into ../packs/,
+# never real directories (those are user-curated playlists).
+if [[ -d "$DEST/presets" ]]; then
+    while IFS= read -r -d '' link; do
+        target="$(readlink "$link")"
+        case "$target" in
+            ../packs/*) rm -f "$link" ;;
+        esac
+    done < <(find "$DEST/presets" -mindepth 1 -maxdepth 1 -type l -print0)
+fi
+
+ln -sfn ../packs/projectM-presets-rpi5/presets "$DEST/presets/default"
+
+for category in "$DEST/packs/projectM-presets-rpi5/presets/creamofthecrop"/*/; do
     name="$(basename "$category")"
     [[ "$name" == "! Transition" ]] && continue
     playlist="$(echo "$name" | tr '[:upper:] ' '[:lower:]-')"
-    ln -sfn "../packs/cream-of-the-crop/$name" "$DEST/presets/$playlist"
+    ln -sfn "../packs/projectM-presets-rpi5/presets/creamofthecrop/$name" "$DEST/presets/$playlist"
 done
+
+ln -sfn ../packs/projectM-presets-rpi5/presets/isoscelesmashup "$DEST/presets/isosceles"
+ln -sfn ../packs/projectM-presets-rpi5/presets/BLTC "$DEST/presets/bltc"
+ln -sfn ../packs/projectM-presets-rpi5/presets/EnD "$DEST/presets/en-d"
 
 echo "Playlists in $DEST/presets: $(ls "$DEST/presets" | tr '\n' ' ')"
