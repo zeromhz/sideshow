@@ -33,6 +33,7 @@ if(SIDESHOW_BUILD_PLAYER)
     find_package(SDL2 REQUIRED)
     find_package(Threads REQUIRED)
     find_package(PkgConfig REQUIRED)
+    find_package(projectM4 REQUIRED)
 
     if(APPLE)
         find_package(OpenGL REQUIRED)
@@ -47,11 +48,15 @@ if(SIDESHOW_BUILD_PLAYER)
     add_executable(sideshow-player
         src/main.cpp
         src/display.cpp
+        src/brightness_pass.cpp
+        src/renderer.cpp
+        src/audio_capture.cpp
     )
     target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow-player PRIVATE
-        sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS})
+        sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
+        libprojectM::projectM)
 endif()
 
 if(SIDESHOW_BUILD_TESTS)

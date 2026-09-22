@@ -1,16 +1,21 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 
+#include <algorithm>
 #include <atomic>
 #include <csignal>
 #include <cstring>
 #include <exception>
 #include <string>
+#include <vector>
 
+#include "audio_capture.h"
+#include "audio_ring.h"
 #include "config.h"
 #include "display.h"
-#include "gl.h"
 #include "log.h"
+#include "output_level.h"
+#include "renderer.h"
 
 using namespace sideshow;
 
@@ -42,7 +47,7 @@ int main(int argc, char** argv) {
     const Config& config = loaded.config;
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
         logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
                  SDL_GetError());
         return 1;
@@ -53,17 +58,46 @@ int main(int argc, char** argv) {
     int exitCode = 0;
     try {
         Display display(config.display);
+        Renderer renderer(display.drawableWidth(), display.drawableHeight(), config.display.fps,
+                          config.presets);
+        OutputLevel output(config.output.masterDefault, config.output.masterCurve,
+                           config.output.masterSmoothingMs);
+        AudioRing ring(static_cast<size_t>(config.audio.sampleRate / 4) * 2);  // ~250 ms stereo
+        AudioCapture audio(config.audio.device, config.audio.sampleRate, ring);
+
+        std::vector<float> pcm(projectm_pcm_get_max_samples() * 2);
+        const Uint32 frameBudgetMs = 1000 / static_cast<Uint32>(std::max(1, config.display.fps));
+        Uint32 lastTicks = SDL_GetTicks();
         bool running = true;
+
         while (running) {
             if (g_signalled.load()) running = false;
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT) running = false;
+                if (event.type == SDL_QUIT) {
+                    running = false;
+                } else if (event.type == SDL_AUDIODEVICEREMOVED && event.adevice.iscapture) {
+                    audio.handleDeviceRemoved(event.adevice.which);
+                } else if (event.type == SDL_WINDOWEVENT &&
+                           event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    renderer.resize(display.drawableWidth(), display.drawableHeight());
+                }
             }
-            glViewport(0, 0, display.drawableWidth(), display.drawableHeight());
-            glClearColor(0.0f, 0.0f, 0.3f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
+
+            const Uint32 now = SDL_GetTicks();
+            audio.tick(now);
+            size_t n = 0;
+            while ((n = ring.read(pcm.data(), pcm.size())) > 0) {
+                renderer.addPcm(pcm.data(), static_cast<unsigned int>(n / 2));
+            }
+
+            output.update(static_cast<float>(now - lastTicks) / 1000.0f);
+            lastTicks = now;
+            renderer.render(output.brightness());
             display.swap();
+
+            const Uint32 frameTime = SDL_GetTicks() - now;
+            if (frameTime < frameBudgetMs) SDL_Delay(frameBudgetMs - frameTime);
         }
     } catch (const std::exception& e) {
         logError(e.what());
