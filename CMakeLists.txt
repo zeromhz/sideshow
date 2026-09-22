@@ -10,14 +10,22 @@ option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
 
+FetchContent_Declare(tomlplusplus
+    GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+    GIT_TAG v3.4.0
+    GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(tomlplusplus)
+
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
     src/output_level.cpp
     src/osc_parse.cpp
     src/audio_ring.cpp
+    src/config.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
+target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
 
 if(SIDESHOW_BUILD_TESTS)
     FetchContent_Declare(Catch2
@@ -32,6 +40,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_command_queue.cpp
         tests/test_osc_parse.cpp
         tests/test_audio_ring.cpp
+        tests/test_config.cpp
     )
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)

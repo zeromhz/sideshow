@@ -1,0 +1,120 @@
+#include "config.h"
+
+#include <fstream>
+#include <optional>
+#include <sstream>
+#include <type_traits>
+
+#include <toml++/toml.hpp>
+
+namespace sideshow {
+namespace {
+
+std::string keyName(std::string_view section, std::string_view key) {
+    if (section.empty()) return std::string(key);
+    return std::string(section) + "." + std::string(key);
+}
+
+template <typename T, typename Valid>
+void readKey(const toml::table& root, std::string_view section, std::string_view key, T& out,
+             Valid valid, std::vector<std::string>& warnings) {
+    toml::node_view<const toml::node> view = section.empty() ? root[key] : root[section][key];
+    if (!view) return;  // absent: keep default
+
+    std::optional<T> value;
+    if constexpr (std::is_same_v<T, float>) {
+        if (auto d = view.template value<double>()) value = static_cast<float>(*d);
+    } else {
+        value = view.template value<T>();
+    }
+
+    if (!value) {
+        warnings.push_back(keyName(section, key) + ": wrong type, using default");
+        return;
+    }
+    if (!valid(*value)) {
+        warnings.push_back(keyName(section, key) + ": invalid value, using default");
+        return;
+    }
+    out = *value;
+}
+
+}  // namespace
+
+bool isValidPanelId(const std::string& id) {
+    if (id.empty() || id.size() > 32 || id[0] == '-') return false;
+    for (char c : id) {
+        const bool ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+ConfigResult parseConfig(std::string_view tomlText) {
+    ConfigResult result;
+    toml::table root;
+    try {
+        root = toml::parse(tomlText);
+    } catch (const toml::parse_error& e) {
+        result.warnings.push_back("config parse error: " + std::string(e.description()) +
+                                  ", using all defaults");
+        return result;
+    }
+
+    Config& c = result.config;
+    auto& w = result.warnings;
+    auto any = [](const auto&) { return true; };
+
+    readKey(root, "", "panel_id", c.panelId, isValidPanelId, w);
+
+    readKey(root, "display", "width", c.display.width, [](int v) { return v >= 0 && v <= 7680; }, w);
+    readKey(root, "display", "height", c.display.height, [](int v) { return v >= 0 && v <= 4320; }, w);
+    readKey(root, "display", "max_width", c.display.maxWidth,
+            [](int v) { return v >= 320 && v <= 7680; }, w);
+    readKey(root, "display", "max_height", c.display.maxHeight,
+            [](int v) { return v >= 240 && v <= 4320; }, w);
+    readKey(root, "display", "fps", c.display.fps, [](int v) { return v >= 1 && v <= 240; }, w);
+    readKey(root, "display", "fullscreen", c.display.fullscreen, any, w);
+
+    readKey(root, "audio", "device", c.audio.device, any, w);
+    readKey(root, "audio", "sample_rate", c.audio.sampleRate,
+            [](int v) { return v >= 8000 && v <= 192000; }, w);
+
+    readKey(root, "osc", "port", c.osc.port, [](int v) { return v >= 1 && v <= 65535; }, w);
+
+    auto nonEmpty = [](const std::string& s) { return !s.empty(); };
+    readKey(root, "presets", "root", c.presets.root, nonEmpty, w);
+    readKey(root, "presets", "textures", c.presets.textures, nonEmpty, w);
+    readKey(root, "presets", "playlist", c.presets.playlist, nonEmpty, w);
+    readKey(root, "presets", "duration", c.presets.duration,
+            [](double v) { return v >= 1.0 && v <= 3600.0; }, w);
+    readKey(root, "presets", "soft_cut_duration", c.presets.softCutDuration,
+            [](double v) { return v >= 0.0 && v <= 60.0; }, w);
+    readKey(root, "presets", "hardcut_enabled", c.presets.hardcutEnabled, any, w);
+    readKey(root, "presets", "beat_sensitivity", c.presets.beatSensitivity,
+            [](float v) { return v >= 0.0f && v <= 5.0f; }, w);
+    readKey(root, "presets", "shuffle", c.presets.shuffle, any, w);
+
+    readKey(root, "output", "master_default", c.output.masterDefault,
+            [](float v) { return v >= 0.0f && v <= 1.0f; }, w);
+    readKey(root, "output", "master_curve", c.output.masterCurve,
+            [](float v) { return v >= 0.1f && v <= 10.0f; }, w);
+    readKey(root, "output", "master_smoothing_ms", c.output.masterSmoothingMs,
+            [](float v) { return v >= 0.0f && v <= 5000.0f; }, w);
+
+    return result;
+}
+
+ConfigResult loadConfigFile(const std::string& path) {
+    std::ifstream in(path);
+    if (!in) {
+        ConfigResult result;
+        result.warnings.push_back("config file not found: " + path + ", using defaults");
+        return result;
+    }
+    std::stringstream text;
+    text << in.rdbuf();
+    return parseConfig(text.str());
+}
+
+}  // namespace sideshow
