@@ -15,8 +15,8 @@ namespace sideshow {
 //
 // A preset that fails to load is marked bad in the catalog (for this session), removed
 // from the playlist and skipped on the next tick(). Too many failures in a row, or an
-// emptied playlist, fall back to "default"; if "default" is the problem, projectM keeps
-// whatever it is showing (its idle preset at worst).
+// emptied playlist, fall back to "default". Otherwise pruning continues until a preset
+// loads; only an emptied playlist leaves projectM on its current (or idle) preset.
 class PresetManager {
 public:
     PresetManager(projectm_handle projectm, PresetCatalog& catalog, bool shuffle);

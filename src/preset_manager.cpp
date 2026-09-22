@@ -7,7 +7,7 @@
 
 namespace sideshow {
 namespace {
-// Consecutive load failures before giving up on the current playlist.
+// Consecutive load failures before a non-default playlist falls back to 'default'.
 constexpr int kMaxConsecutiveFailures = 10;
 
 std::string filenameOf(const std::string& path) {
@@ -89,16 +89,21 @@ void PresetManager::tick() {
     failedIndex_.reset();
     projectm_playlist_remove_preset(playlist_, index);
 
+    // Keep pruning and advancing until something loads: after a failed load projectM will
+    // not request another switch by itself, so stopping early would freeze the picture.
     const uint32_t size = projectm_playlist_size(playlist_);
-    if (size == 0 || ++consecutiveFailures_ >= kMaxConsecutiveFailures) {
-        if (playlistName_ != "default") {
-            logWarn("giving up on playlist '" + playlistName_ +
-                    "' (broken presets), falling back to 'default'");
+    const bool onDefault = playlistName_ == "default";
+    if (size == 0 || (!onDefault && ++consecutiveFailures_ == kMaxConsecutiveFailures)) {
+        if (!onDefault) {
+            logWarn("playlist '" + playlistName_ + "' keeps failing, falling back to 'default'");
             if (switchPlaylist("default")) return;
         }
-        logError("no loadable presets left to try; keeping the current picture");
-        consecutiveFailures_ = 0;
-        return;
+        if (size == 0) {
+            logError("playlist '" + playlistName_ +
+                     "' has no loadable presets left; keeping the current picture");
+            return;
+        }
+        // No usable 'default': keep pruning this playlist instead.
     }
     // Removal shifted the following item into `index` (or wrap to the start), so
     // play it directly rather than advancing past it; shuffle just picks another.
