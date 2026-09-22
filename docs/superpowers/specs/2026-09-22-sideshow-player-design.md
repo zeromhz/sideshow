@@ -229,8 +229,10 @@ playlist. Custom playlists are extra directories under the preset root.
 |---|---|
 | No screen detected at boot | Log, exit non-zero; systemd restarts every 2 s until a screen appears |
 | Mic missing at boot / unplugged mid-show | Keep rendering on silence; retry opening the device every 3 s; log once per state change |
-| Preset fails to load | Skip to next, remember as bad for this session, log warning |
-| All presets in a playlist fail / playlist empty | Fall back to `default` playlist; if that fails, render projectM's idle preset |
+| SDL audio can't initialise | Log warning, render without audio (no capture retries) |
+| Preset fails to load | Remove it from the playlist, skip to the next (or previous, after `prev`), remember as bad for this session, log warning |
+| Many presets in a row fail / playlist emptied | A non-default playlist falls back to `default` after 10 consecutive failures or when emptied; otherwise keep pruning and advancing until a preset loads. Only an emptied `default` (or an emptied playlist with no usable `default`) stops, keeping the current picture or projectM's idle preset (error logged) |
+| Configured playlist missing or empty at start | Fall back to `default`; if that is missing too, show projectM's idle preset (error logged) |
 | Bad OSC message | Ignore and log (debug level) |
 | OSC port unavailable | Log error, keep rendering (no remote control) |
 | Crash | systemd restarts in ~2 s |
