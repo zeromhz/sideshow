@@ -49,7 +49,11 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     failedIndex_.reset();
     consecutiveFailures_ = 0;
     logInfo("playlist '" + name + "' (" + std::to_string(files.size()) + " presets)");
-    projectm_playlist_play_next(playlist_, false);
+    if (projectm_playlist_get_shuffle(playlist_)) {
+        projectm_playlist_play_next(playlist_, false);
+    } else {
+        projectm_playlist_set_position(playlist_, 0, false);  // play_next would skip item 0
+    }
     return true;
 }
 
