@@ -44,7 +44,7 @@ One process, `sideshow-player`, per Pi.
 | **Config** | Load and validate `/etc/sideshow/config.toml` into a plain struct | toml++ |
 | **Display** | SDL2 window + OpenGL ES 3 context. On the Pi: KMS/DRM fullscreen, no X/Wayland. On macOS: a normal window. Owns the frame loop (vsync, target 60 fps). | SDL2 |
 | **AudioCapture** | SDL2 audio capture on its own callback thread; writes float PCM into a lock-free/mutexed ring buffer. Detects device loss and retries. | SDL2 |
-| **Renderer** | Owns the projectM instance. Each frame: drain ring buffer into `projectm_pcm_add_float`, render projectM into an offscreen framebuffer we own, then a final full-screen pass to the default framebuffer that applies output brightness (master × blackout). | Display, AudioCapture, PresetManager, OutputLevel |
+| **Renderer** | Owns the projectM instance. Each frame: drain ring buffer into `projectm_pcm_add_float`, render projectM (4.1.7 always draws to the default framebuffer), then a multiply-blend fullscreen pass that applies output brightness (master × blackout). | Display, AudioCapture, PresetManager, OutputLevel |
 | **PresetManager** | Wraps projectM's playlist library: playlist directories, shuffle, timed auto-advance, beat-triggered hard cuts, lock, next/prev/random/load-by-name, skip-and-remember failed presets. | Renderer's projectM handle |
 | **OutputLevel** | Pure logic: holds master target, current smoothed value, curve exponent, blackout flag. `update(dt)` slews toward target; `brightness()` returns `pow(smoothed, curve) × (blackout ? 0 : 1)`. | none |
 | **OscServer** | liblo UDP server on its own thread. Parses and validates incoming messages into `Command` values and pushes them onto a thread-safe queue. Answers `/sideshow/ping`. | liblo |
@@ -64,14 +64,14 @@ USB mic ─▶ AudioCapture (thread) ─▶ ring buffer ─┐
 OSC ─▶ OscServer (thread) ─▶ CommandQueue ─▶ main loop ─▶ PresetManager / OutputLevel
                                                  │
                                                  ▼
-                           projectM ─▶ offscreen FBO ─▶ brightness pass ─▶ HDMI
+                           projectM ─▶ default framebuffer ─▶ brightness pass (multiply blend) ─▶ HDMI
 ```
 
 ### Camera seam (future)
 
-Because projectM renders into a framebuffer we own and a final compositing
-pass already exists, camera frames can later be added as another texture source
-in that pass (or fed into projectM). No camera code in v1.
+A post-projectM compositing pass already exists (the brightness pass). Camera
+frames can later be composited there, or fed to projectM once a projectM release
+lets apps supply a target framebuffer (4.1.7 does not). No camera code in v1.
 
 ## OSC interface
 
@@ -133,6 +133,7 @@ panel_id = "panel-01"          # set by install.sh --panel-id
 width = 1920                   # 0 = use display's native mode
 height = 1080
 fps = 60
+fullscreen = true              # false for windowed dev on macOS
 
 [audio]
 device = ""                    # "" = default capture device; else substring match on SDL device name
@@ -143,6 +144,7 @@ port = 9000
 
 [presets]
 root = "/opt/sideshow/presets"
+textures = "/opt/sideshow/textures"
 playlist = "default"           # subdirectory of root
 duration = 30.0                # seconds per preset
 soft_cut_duration = 3.0
@@ -178,19 +180,21 @@ Idempotent; runs on a fresh Raspberry Pi OS Lite install:
 1. Install apt dependencies (build tools, CMake, SDL2 dev, liblo dev, GLES/EGL dev).
 2. Clone and build libprojectM at a pinned tag with GLES enabled; install to `/usr/local`.
 3. Build and install `sideshow-player` to `/opt/sideshow/bin`.
-4. Install presets to `/opt/sideshow/presets` (curated set; `--all-presets` adds the full projectM pack).
+4. Fetch the pinned preset and texture packs (`setup/fetch_presets.sh`) and create playlist symlinks under `/opt/sideshow/presets`.
 5. Write `/etc/sideshow/config.toml` if absent (never overwrites an existing one).
 6. Create `sideshow` user, install and enable the systemd unit.
 7. `--panel-id panel-NN` sets `panel_id` and the hostname.
-8. Apply boot-quieting tweaks.
+8. Apply boot-quieting tweaks, disable the tty1 getty, and force HDMI on at 1080p60 (`video=HDMI-A-1:1920x1080@60D`) so a Pi booted before its screen still displays.
 
 Wi-Fi credentials and SSH are configured via Raspberry Pi Imager, not stored in
 this repo. A `pi-gen` golden image is a later step, not v1.
 
 ### Presets
 
-Repo ships `presets/default/` with a small curated starter set, and supports
-additional playlist subdirectories (e.g. `mellow/`, `intense/`).
+Presets come from projectM's "Cream of the Crop" pack (≈9,800 presets, already
+curated by the projectM team), pinned to a commit. `default` links to the whole
+pack; each pack category (fractal, hypnotic, waveform, …) becomes its own
+playlist. Custom playlists are extra directories under the preset root.
 
 ## Error handling
 
@@ -221,9 +225,11 @@ sideshow/
 │   ├── osc_server.{h,cpp}
 │   └── command.h              # Command variant + CommandQueue
 ├── tests/                     # unit tests (Catch2 via CMake FetchContent)
-├── presets/default/
 ├── setup/
 │   ├── install.sh
+│   ├── build_projectm.sh
+│   ├── fetch_presets.sh
+│   ├── dev-macos.sh
 │   ├── sideshow-player.service
 │   └── config.example.toml
 ├── tools/osc_send.py
