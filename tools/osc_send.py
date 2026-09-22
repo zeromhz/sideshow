@@ -8,6 +8,7 @@ Examples:
   tools/osc_send.py ping                          # list panels that answer
 """
 import argparse
+import math
 import socket
 import struct
 import sys
@@ -26,6 +27,8 @@ ARG_TYPES = {
     "playlist": str,
     "preset": str,
 }
+
+FLOAT32_MAX = 3.4028234663852886e38
 
 
 def _pad(data: bytes) -> bytes:
@@ -54,7 +57,8 @@ def encode_message(address, args):
 def parse_value(command, text):
     """Return the OSC argument list for `command`, or raise ValueError with a readable message.
 
-    Toggles (int) accept "1", "0", "1.0", "0.5" etc. and truncate toward zero.
+    Toggles (int) accept any number and send 1 for non-zero, 0 for zero, like the player.
+    Floats must be finite and fit in a float32.
     """
     arg_type = ARG_TYPES[command]
     if arg_type is None:
@@ -67,9 +71,13 @@ def parse_value(command, text):
         return [text]
     try:
         number = float(text)
-        return [int(number) if arg_type is int else number]
-    except (ValueError, OverflowError):
+    except ValueError:
         raise ValueError(f"{command} needs a number, got {text!r}") from None
+    if not math.isfinite(number) or abs(number) > FLOAT32_MAX:
+        raise ValueError(f"{command} value out of range: {text!r}")
+    if arg_type is int:
+        return [1 if number != 0 else 0]
+    return [number]
 
 
 def _read_string(data, offset):

@@ -30,7 +30,9 @@ class ParseValueTest(unittest.TestCase):
     def test_toggles_accept_int_and_float_text(self):
         self.assertEqual(parse_value("blackout", "1"), [1])
         self.assertEqual(parse_value("lock", "1.0"), [1])
-        self.assertEqual(parse_value("hardcut", "0.5"), [0])
+        self.assertEqual(parse_value("hardcut", "0.5"), [1])
+        self.assertEqual(parse_value("blackout", "1e10"), [1])
+        self.assertEqual(parse_value("lock", "-2"), [1])
         self.assertEqual(parse_value("blackout", "0"), [0])
 
     def test_floats_and_strings(self):
@@ -39,9 +41,14 @@ class ParseValueTest(unittest.TestCase):
         self.assertEqual(parse_value("playlist", "mellow"), ["mellow"])
         self.assertEqual(parse_value("next", None), [])
 
+    def test_parsed_values_always_encode(self):
+        for command, text in [("blackout", "1e10"), ("master", "3.4e38"), ("master", "-1e-50")]:
+            encode_message("/x", parse_value(command, text))
+
     def test_bad_input_raises_value_error(self):
         for command, text in [("blackout", "on"), ("master", "loud"), ("lock", "inf"),
-                              ("master", None), ("next", "1")]:
+                              ("master", None), ("next", "1"), ("master", "1e39"),
+                              ("master", "nan"), ("duration", "-inf")]:
             with self.assertRaises(ValueError):
                 parse_value(command, text)
 
