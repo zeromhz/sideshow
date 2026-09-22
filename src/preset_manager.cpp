@@ -49,6 +49,7 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     failedIndex_.reset();
     consecutiveFailures_ = 0;
     logInfo("playlist '" + name + "' (" + std::to_string(files.size()) + " presets)");
+    lastLoadFailed_ = false;
     if (projectm_playlist_get_shuffle(playlist_)) {
         projectm_playlist_play_next(playlist_, false);
     } else {
@@ -57,14 +58,21 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     return true;
 }
 
-void PresetManager::next() { projectm_playlist_play_next(playlist_, false); }
+void PresetManager::next() {
+    lastLoadFailed_ = false;
+    projectm_playlist_play_next(playlist_, false);
+}
 
-void PresetManager::prev() { projectm_playlist_play_previous(playlist_, false); }
+void PresetManager::prev() {
+    lastLoadFailed_ = false;
+    projectm_playlist_play_previous(playlist_, false);
+}
 
 void PresetManager::random() {
     const uint32_t size = projectm_playlist_size(playlist_);
     if (size == 0) return;
     std::uniform_int_distribution<uint32_t> pick(0, size - 1);
+    lastLoadFailed_ = false;
     projectm_playlist_set_position(playlist_, pick(rng_), false);
 }
 
@@ -72,6 +80,7 @@ bool PresetManager::loadPreset(const std::string& name) {
     const auto path = catalog_.findPreset(name);
     if (!path || catalog_.isBad(*path)) return false;
     // Not via the playlist, so no switched callback follows; a failure only reaches onFailed.
+    lastLoadFailed_ = false;
     projectm_load_preset_file(projectm_, path->c_str(), true);
     if (lastLoadFailed_) {
         lastLoadFailed_ = false;  // projectM keeps the current preset
@@ -109,6 +118,7 @@ void PresetManager::tick() {
         }
         // No usable 'default': keep pruning this playlist instead.
     }
+    lastLoadFailed_ = false;
     // Removal shifted the following item into `index` (or wrap to the start), so
     // play it directly rather than advancing past it; shuffle just picks another.
     if (projectm_playlist_get_shuffle(playlist_)) {
