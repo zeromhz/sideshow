@@ -139,8 +139,9 @@ int main(int argc, char** argv) {
                 }
             }
 
-            while (auto command = commands.pop()) applyCommand(*command, presets, renderer, output);
+            // Skip a failed preset first, so it can't override or double an OSC command.
             presets.tick();
+            while (auto command = commands.pop()) applyCommand(*command, presets, renderer, output);
 
             const Uint32 now = SDL_GetTicks();
             if (audio) audio->tick(now);
