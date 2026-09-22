@@ -1,0 +1,34 @@
+# /etc/sideshow/config.toml: sideshow-player configuration.
+# Missing or invalid keys fall back to the defaults shown here (a warning is logged).
+
+panel_id = "panel-01"          # [a-z0-9-]; set by install.sh --panel-id
+
+[display]
+width = 0                      # 0 = automatic: the screen's native mode, capped below
+height = 0                     # set both (e.g. 1920 x 1080) to force a mode
+max_width = 2560               # automatic mode never exceeds this (4K screens step down)
+max_height = 1440
+fps = 60
+fullscreen = true
+
+[audio]
+device = ""                    # "" = first capture device; else part of its name, e.g. "USB"
+sample_rate = 48000
+
+[osc]
+port = 9000
+
+[presets]
+root = "/opt/sideshow/presets" # each subdirectory is a playlist
+textures = "/opt/sideshow/textures"
+playlist = "default"
+duration = 30.0                # seconds per preset
+soft_cut_duration = 3.0        # blend time between presets
+hardcut_enabled = false        # beat-triggered abrupt cuts
+beat_sensitivity = 1.0         # 0..5
+shuffle = true
+
+[output]
+master_default = 1.0           # brightness at boot, before any OSC master arrives
+master_curve = 2.0             # 1.0 = linear; 2.0 = perceptually even fade
+master_smoothing_ms = 50
