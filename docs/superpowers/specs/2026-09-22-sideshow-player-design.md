@@ -279,7 +279,8 @@ sideshow/
   behind a thin interface so it's testable without a GL context.
 
 **Tools:** `tools/osc_send.py` — send any command to one IP or broadcast
-(e.g. `osc_send.py --all master 0.5`); also runs `ping` and prints pongs.
+(e.g. `osc_send.py master 0.5`, which targets all panels by default); also runs `ping` and
+prints pongs.
 
 **On-hardware smoke checklist** (README): boots to visuals with no input,
 reacts to sound, every OSC command works, VDMX fader fades smoothly, mic unplug

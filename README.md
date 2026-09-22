@@ -68,6 +68,9 @@ tools/osc_send.py --panel panel-03 blackout 1   # one panel
 tools/osc_send.py --host 192.168.1.42 master 0.5
 ```
 
+The default `--host 255.255.255.255` broadcast may only leave the primary interface on a Mac with
+several networks, so for the stage network pass its subnet broadcast, e.g. `--host 192.168.1.255`.
+
 ### VDMX master fader
 
 In VDMX, add an OSC output to the subnet broadcast address (e.g. `192.168.1.255`), port `9000`.

@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from osc_send import decode_message, encode_message
+from osc_send import decode_message, encode_message, parse_value
 
 
 class EncodeTest(unittest.TestCase):
@@ -24,6 +24,26 @@ class EncodeTest(unittest.TestCase):
     def test_rejects_unsupported_types(self):
         with self.assertRaises(TypeError):
             encode_message("/x", [b"bytes"])
+
+
+class ParseValueTest(unittest.TestCase):
+    def test_toggles_accept_int_and_float_text(self):
+        self.assertEqual(parse_value("blackout", "1"), [1])
+        self.assertEqual(parse_value("lock", "1.0"), [1])
+        self.assertEqual(parse_value("hardcut", "0.5"), [0])
+        self.assertEqual(parse_value("blackout", "0"), [0])
+
+    def test_floats_and_strings(self):
+        self.assertEqual(parse_value("master", "0.5"), [0.5])
+        self.assertEqual(parse_value("duration", "10"), [10.0])
+        self.assertEqual(parse_value("playlist", "mellow"), ["mellow"])
+        self.assertEqual(parse_value("next", None), [])
+
+    def test_bad_input_raises_value_error(self):
+        for command, text in [("blackout", "on"), ("master", "loud"), ("lock", "inf"),
+                              ("master", None), ("next", "1")]:
+            with self.assertRaises(ValueError):
+                parse_value(command, text)
 
 
 if __name__ == "__main__":

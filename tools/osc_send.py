@@ -51,6 +51,27 @@ def encode_message(address, args):
     return _pad(address.encode()) + _pad(tags.encode()) + payload
 
 
+def parse_value(command, text):
+    """Return the OSC argument list for `command`, or raise ValueError with a readable message.
+
+    Toggles (int) accept "1", "0", "1.0", "0.5" etc. and truncate toward zero.
+    """
+    arg_type = ARG_TYPES[command]
+    if arg_type is None:
+        if text is not None:
+            raise ValueError(f"{command} takes no value")
+        return []
+    if text is None:
+        raise ValueError(f"{command} needs a value")
+    if arg_type is str:
+        return [text]
+    try:
+        number = float(text)
+        return [int(number) if arg_type is int else number]
+    except (ValueError, OverflowError):
+        raise ValueError(f"{command} needs a number, got {text!r}") from None
+
+
 def _read_string(data, offset):
     end = data.index(b"\0", offset)
     text = data[offset:end].decode(errors="replace")
@@ -107,12 +128,10 @@ def main():
         ping(sock, options.host, options.port)
         return 0
 
-    arg_type = ARG_TYPES[options.command]
-    if arg_type is None and options.value is not None:
-        parser.error(f"{options.command} takes no value")
-    if arg_type is not None and options.value is None:
-        parser.error(f"{options.command} needs a value")
-    args = [] if arg_type is None else [arg_type(options.value)]
+    try:
+        args = parse_value(options.command, options.value)
+    except ValueError as error:
+        parser.error(str(error))
     address = f"/sideshow/{options.panel}/{options.command}"
     sock.sendto(encode_message(address, args), (options.host, options.port))
     return 0
