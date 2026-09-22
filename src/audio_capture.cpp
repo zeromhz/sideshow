@@ -1,5 +1,7 @@
 #include "audio_capture.h"
 
+#include <vector>
+
 #include "log.h"
 
 namespace sideshow {
@@ -22,23 +24,35 @@ void AudioCapture::handleDeviceRemoved(SDL_AudioDeviceID id) {
     nextRetryMs_ = 0;
 }
 
-std::optional<std::string> AudioCapture::chooseDevice() const {
+namespace {
+std::vector<std::string> captureDeviceNames() {
+    std::vector<std::string> names;
     const int count = SDL_GetNumAudioDevices(1);  // also re-detects devices
     for (int i = 0; i < count; ++i) {
-        const char* name = SDL_GetAudioDeviceName(i, 1);
-        if (!name) continue;
-        if (match_.empty() || std::string(name).find(match_) != std::string::npos) return std::string(name);
+        if (const char* name = SDL_GetAudioDeviceName(i, 1)) names.emplace_back(name);
+    }
+    return names;
+}
+}  // namespace
+
+std::optional<std::string> AudioCapture::chooseDevice(const std::vector<std::string>& names) const {
+    for (const auto& name : names) {
+        if (match_.empty() || name.find(match_) != std::string::npos) return name;
     }
     return std::nullopt;
 }
 
 void AudioCapture::open() {
-    const auto name = chooseDevice();
+    const std::vector<std::string> names = captureDeviceNames();
+    const auto name = chooseDevice(names);
     if (!name) {
         if (!warned_) {
+            std::string available;
+            for (const auto& n : names) available += (available.empty() ? "'" : ", '") + n + "'";
             logWarn("no audio capture device" +
                     (match_.empty() ? std::string() : " matching '" + match_ + "'") +
-                    "; rendering silence, will retry");
+                    " (available: " + (available.empty() ? "none" : available) +
+                    "); rendering silence, will retry");
             warned_ = true;
         }
         return;

@@ -163,7 +163,7 @@ fps = 60
 fullscreen = true              # false for windowed dev on macOS
 
 [audio]
-device = ""                    # "" = default capture device; else substring match on SDL device name
+device = ""                    # "" = first capture device SDL lists (not the ALSA default, which on a Pi is usually HDMI output); else substring match on SDL device name
 sample_rate = 48000
 
 [osc]

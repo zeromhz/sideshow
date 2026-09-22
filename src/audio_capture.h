@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "audio_ring.h"
 
@@ -12,6 +13,7 @@ namespace sideshow {
 
 // Captures stereo float audio from an SDL capture device into an AudioRing.
 // Never fails hard: if no device is available it retries every few seconds.
+// An empty device match picks the first capture device SDL lists.
 class AudioCapture {
 public:
     AudioCapture(std::string deviceMatch, int sampleRate, AudioRing& ring);
@@ -26,7 +28,7 @@ public:
 private:
     static constexpr uint32_t kRetryMs = 3000;
     static void callback(void* userdata, Uint8* stream, int len);
-    std::optional<std::string> chooseDevice() const;
+    std::optional<std::string> chooseDevice(const std::vector<std::string>& names) const;
     void open();
     void close();
 
