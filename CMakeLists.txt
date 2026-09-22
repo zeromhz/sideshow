@@ -14,6 +14,7 @@ include(FetchContent)
 add_library(sideshow_core STATIC
     src/output_level.cpp
     src/osc_parse.cpp
+    src/audio_ring.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
@@ -30,6 +31,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_output_level.cpp
         tests/test_command_queue.cpp
         tests/test_osc_parse.cpp
+        tests/test_audio_ring.cpp
     )
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
