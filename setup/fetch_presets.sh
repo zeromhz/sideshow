@@ -37,20 +37,27 @@ fetch_pinned "$PRESETS_REPO" "$PRESETS_COMMIT" "$DEST/packs/projectM-presets-rpi
 fetch_pinned "$TEXTURES_REPO" "$TEXTURES_COMMIT" "$DEST/packs/milkdrop-texture-pack"
 
 # Migrate away from the old layout: cream-of-the-crop pack, and textures as a
-# git checkout instead of a plain directory of copied files.
-if [[ -e "$DEST/textures/.git" ]]; then
-    rm -rf "$DEST/textures"
-fi
+# git checkout instead of a plain directory of copied files. (An old textures/
+# git checkout is just a stale build of the same directory, so it's fine for
+# the rebuild below to replace it wholesale.)
 rm -rf "$DEST/packs/cream-of-the-crop"
 
 # projectM's texture search is recursive but does not follow nested directory
-# symlinks, so <dest>/textures must be a real directory of real files.
-mkdir -p "$DEST/textures"
-# cp -n exits non-zero on macOS/BSD when it skips an existing file, even
-# though nothing went wrong; that's expected on a re-run, so don't let it
-# trip set -e.
-cp -Rn "$DEST/packs/milkdrop-texture-pack/textures"/. "$DEST/textures/" || true
-cp -Rn "$DEST/packs/projectM-presets-rpi5/textures"/. "$DEST/textures/" || true
+# symlinks, so <dest>/textures must be a real directory of real files. Rebuild
+# it from scratch each run (rather than merging in new files with `cp -n`) so
+# stale textures don't pile up when the pinned commits are bumped, and so a
+# real I/O failure (full disk, permissions) isn't silently swallowed the way
+# `cp -n`'s "file already exists" non-error would otherwise force us to.
+# Milkdrop textures go in first, then the rpi5 pack's own textures overwrite
+# any same-named file: the rpi5 presets were benchmarked against its own
+# textures (e.g. seaweed.jpg differs between the two packs), so its version
+# must win.
+rm -rf "$DEST/textures.tmp"
+mkdir -p "$DEST/textures.tmp"
+cp -R "$DEST/packs/milkdrop-texture-pack/textures"/. "$DEST/textures.tmp/"
+cp -R "$DEST/packs/projectM-presets-rpi5/textures"/. "$DEST/textures.tmp/"
+rm -rf "$DEST/textures"
+mv "$DEST/textures.tmp" "$DEST/textures"
 
 mkdir -p "$DEST/presets"
 
@@ -67,6 +74,7 @@ fi
 
 ln -sfn ../packs/projectM-presets-rpi5/presets "$DEST/presets/default"
 
+shopt -s nullglob
 for category in "$DEST/packs/projectM-presets-rpi5/presets/creamofthecrop"/*/; do
     name="$(basename "$category")"
     [[ "$name" == "! Transition" ]] && continue
