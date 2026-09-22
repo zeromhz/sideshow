@@ -27,6 +27,7 @@ if(SIDESHOW_BUILD_TESTS)
     enable_testing()
     add_executable(sideshow_tests
         tests/test_output_level.cpp
+        tests/test_command_queue.cpp
     )
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
