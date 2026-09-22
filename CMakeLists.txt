@@ -23,6 +23,7 @@ add_library(sideshow_core STATIC
     src/audio_ring.cpp
     src/config.cpp
     src/preset_catalog.cpp
+    src/display_mode.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
@@ -43,6 +44,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_audio_ring.cpp
         tests/test_config.cpp
         tests/test_preset_catalog.cpp
+        tests/test_display_mode.cpp
     )
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
