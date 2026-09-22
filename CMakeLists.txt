@@ -29,6 +29,31 @@ target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
 
+if(SIDESHOW_BUILD_PLAYER)
+    find_package(SDL2 REQUIRED)
+    find_package(Threads REQUIRED)
+    find_package(PkgConfig REQUIRED)
+
+    if(APPLE)
+        find_package(OpenGL REQUIRED)
+        set(SIDESHOW_GL_LIBS OpenGL::GL)
+        set(SIDESHOW_GL_DEFS "")
+    else()
+        pkg_check_modules(GLES REQUIRED IMPORTED_TARGET glesv2)
+        set(SIDESHOW_GL_LIBS PkgConfig::GLES)
+        set(SIDESHOW_GL_DEFS SIDESHOW_GLES)
+    endif()
+
+    add_executable(sideshow-player
+        src/main.cpp
+        src/display.cpp
+    )
+    target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
+    target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
+    target_link_libraries(sideshow-player PRIVATE
+        sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS})
+endif()
+
 if(SIDESHOW_BUILD_TESTS)
     FetchContent_Declare(Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
