@@ -34,6 +34,7 @@ if(SIDESHOW_BUILD_PLAYER)
     find_package(Threads REQUIRED)
     find_package(PkgConfig REQUIRED)
     find_package(projectM4 REQUIRED)
+    find_package(projectM4Playlist REQUIRED)
 
     if(APPLE)
         find_package(OpenGL REQUIRED)
@@ -51,12 +52,13 @@ if(SIDESHOW_BUILD_PLAYER)
         src/brightness_pass.cpp
         src/renderer.cpp
         src/audio_capture.cpp
+        src/preset_manager.cpp
     )
     target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow-player PRIVATE
         sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
-        libprojectM::projectM)
+        libprojectM::projectM libprojectM::playlist)
 endif()
 
 if(SIDESHOW_BUILD_TESTS)

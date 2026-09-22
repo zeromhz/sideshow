@@ -15,6 +15,8 @@
 #include "display.h"
 #include "log.h"
 #include "output_level.h"
+#include "preset_catalog.h"
+#include "preset_manager.h"
 #include "renderer.h"
 
 using namespace sideshow;
@@ -60,6 +62,9 @@ int main(int argc, char** argv) {
         Display display(config.display);
         Renderer renderer(display.drawableWidth(), display.drawableHeight(), config.display.fps,
                           config.presets);
+        PresetCatalog catalog(config.presets.root);
+        PresetManager presets(renderer.handle(), catalog, config.presets.shuffle);
+        presets.start(config.presets.playlist);
         OutputLevel output(config.output.masterDefault, config.output.masterCurve,
                            config.output.masterSmoothingMs);
         AudioRing ring(static_cast<size_t>(config.audio.sampleRate / 4) * 2);  // ~250 ms stereo
