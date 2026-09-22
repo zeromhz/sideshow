@@ -6,6 +6,7 @@
 #include <csignal>
 #include <cstring>
 #include <exception>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -86,10 +87,14 @@ int main(int argc, char** argv) {
     const Config& config = loaded.config;
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
         logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
                  SDL_GetError());
         return 1;
+    }
+    const bool audioAvailable = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0;
+    if (!audioAvailable) {
+        logWarn(std::string("audio unavailable: ") + SDL_GetError() + "; rendering without audio");
     }
     std::signal(SIGINT, handleSignal);
     std::signal(SIGTERM, handleSignal);
@@ -107,7 +112,8 @@ int main(int argc, char** argv) {
         OutputLevel output(config.output.masterDefault, config.output.masterCurve,
                            config.output.masterSmoothingMs);
         AudioRing ring(static_cast<size_t>(config.audio.sampleRate / 4) * 2);  // ~250 ms stereo
-        AudioCapture audio(config.audio.device, config.audio.sampleRate, ring);
+        std::optional<AudioCapture> audio;  // empty when SDL audio is unavailable
+        if (audioAvailable) audio.emplace(config.audio.device, config.audio.sampleRate, ring);
         CommandQueue commands;
         PlayerStatus status;
         OscServer osc(config.osc.port, config.panelId, commands, status);
@@ -126,7 +132,7 @@ int main(int argc, char** argv) {
                 if (event.type == SDL_QUIT) {
                     running = false;
                 } else if (event.type == SDL_AUDIODEVICEREMOVED && event.adevice.iscapture) {
-                    audio.handleDeviceRemoved(event.adevice.which);
+                    if (audio) audio->handleDeviceRemoved(event.adevice.which);
                 } else if (event.type == SDL_WINDOWEVENT &&
                            event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                     renderer.resize(display.drawableWidth(), display.drawableHeight());
@@ -137,7 +143,7 @@ int main(int argc, char** argv) {
             presets.tick();
 
             const Uint32 now = SDL_GetTicks();
-            audio.tick(now);
+            if (audio) audio->tick(now);
             size_t n = 0;
             while ((n = ring.read(pcm.data(), pcm.size())) > 0) {
                 renderer.addPcm(pcm.data(), static_cast<unsigned int>(n / 2));
