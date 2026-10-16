@@ -42,12 +42,16 @@ void Renderer::addPcm(const float* interleavedStereo, unsigned int frames) {
     projectm_pcm_add_float(projectm_, interleavedStereo, frames, PROJECTM_STEREO);
 }
 
-void Renderer::render(float brightness) {
+void Renderer::renderFrame() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, width_, height_);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     projectm_opengl_render_frame(projectm_);
+}
+
+void Renderer::render(float brightness) {
+    renderFrame();
     brightness_.apply(brightness, width_, height_);
 }
 

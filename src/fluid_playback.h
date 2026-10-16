@@ -1,12 +1,8 @@
 #pragma once
 #include "fluid_presets.h"
+#include "visual_backend.h"
 #include <random>
 namespace sideshow {
-struct PlaybackSettings {
-    double duration = 30.0;
-    bool shuffle = true, locked = false, hardcut = false;
-    float beatSensitivity = 1.0f;
-};
 class FluidPlayback {
 public:
     FluidPlayback(std::string_view preset, PlaybackSettings settings, uint32_t seed);

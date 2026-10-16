@@ -20,6 +20,7 @@ public:
     void resize(int width, int height);
     void addPcm(const float* interleavedStereo, unsigned int frames);
     void render(float brightness);
+    void renderFrame();
 
     void setBeatSensitivity(float value);
     void setHardCutEnabled(bool on);
