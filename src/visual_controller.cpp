@@ -10,10 +10,11 @@ VisualController::VisualController(Config config,int width,int height,BackendFac
     saved_[0] = {config_.presets.playlist,""};
     saved_[1] = {"default",config_.fluid.preset};
     saved_[2] = {".",config_.video.preset};
+    saved_[3] = {".",config_.isf.preset};
     videoEnd_=config_.video.end;
-    if(config_.visuals.mode==VisualMode::Video) {
+    if(config_.visuals.mode==VisualMode::Video || config_.visuals.mode==VisualMode::Isf) {
         if(!setMode(VisualMode::Milkdrop)) throw std::runtime_error("No startup fallback backend");
-        setMode(VisualMode::Video);return;
+        setMode(config_.visuals.mode);return;
     }
     if (!setMode(config_.visuals.mode) && !setMode(VisualMode::Milkdrop))
         throw std::runtime_error("No visualization backend could initialize");
@@ -70,9 +71,10 @@ void VisualController::resize(int w,int h) {
     if(pending_) { try {pending_->resize(w,h);} catch(const std::exception& e) {logWarn(e.what());pending_.reset();} }
     try {active_->resize(w,h);} catch(const std::exception& e) {logWarn(e.what());recover();}
 }
-void VisualController::addPcm(const float* pcm,size_t frames) {active_->addPcm(pcm,frames);}
+void VisualController::addPcm(const float* pcm,size_t frames) {active_->addPcm(pcm,frames);if(pending_)pending_->addPcm(pcm,frames);}
+void VisualController::clearAudioHistory(){active_->clearAudioHistory();if(pending_)pending_->clearAudioHistory();}
 std::string VisualController::statusPreset() const {
-    return (mode_==VisualMode::Video ? "video/" : mode_==VisualMode::Fluid ? "fluid/" : "") + active_->selection().preset;
+    return (mode_==VisualMode::Isf ? "isf/" : mode_==VisualMode::Video ? "video/" : mode_==VisualMode::Fluid ? "fluid/" : "") + active_->selection().preset;
 }
 void VisualController::updateSettings() {
     active_->setSettings(settings_);
@@ -83,6 +85,12 @@ void VisualController::apply(const Command& command) {
     std::visit([&](const auto& c) {
         using T=std::decay_t<decltype(c)>;
         if constexpr(std::is_same_v<T,cmd::Mode>) setMode(c.value);
+        else if constexpr(std::is_same_v<T,cmd::IsfParam> || std::is_same_v<T,cmd::IsfEvent>) {
+            if(auto control=target->isfControl()) {
+                if constexpr(std::is_same_v<T,cmd::IsfParam>) control->setParameter(c);
+                else control->triggerEvent(c);
+            } else logWarn("ISF control ignored outside ISF mode");
+        }
         else if constexpr(std::is_same_v<T,cmd::VideoEndMode> || std::is_same_v<T,cmd::VideoPause> || std::is_same_v<T,cmd::VideoRestart>) {
             if(auto control=target->videoControl()) {
                 if constexpr(std::is_same_v<T,cmd::VideoEndMode>) control->setEnd(c.value);

@@ -27,7 +27,7 @@ struct Pool {GLBufferPoolRef value;~Pool(){if(value)value->prepareToBeDeleted();
 ISFVal runtimeValue(const IsfValue& v){return std::visit([](const auto& x)->ISFVal{using T=std::decay_t<decltype(x)>;if constexpr(std::is_same_v<T,bool>)return ISFBoolVal(x);else if constexpr(std::is_same_v<T,int32_t>)return ISFLongVal(x);else if constexpr(std::is_same_v<T,double>)return ISFFloatVal(x);else if constexpr(std::is_same_v<T,std::array<double,2>>)return ISFPoint2DVal(x[0],x[1]);else return ISFColorVal(x[0],x[1],x[2],x[3]);},v);}
 IsfValue hostValue(ISFVal v,IsfInputKind kind){switch(kind){case IsfInputKind::Bool:return v.getBoolVal();case IsfInputKind::Long:return v.getLongVal();case IsfInputKind::Float:return v.getDoubleVal();case IsfInputKind::Point2D:return std::array<double,2>{v.getPointValByIndex(0),v.getPointValByIndex(1)};case IsfInputKind::Color:return std::array<double,4>{v.getColorValByChannel(0),v.getColorValByChannel(1),v.getColorValByChannel(2),v.getColorValByChannel(3)};default:return false;}}
 void checkGl(){if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("ISF GL operation failed");}
-std::runtime_error error(const ISFErr& e){std::string msg=e.general+": "+e.specific;for(const auto& d:e.details)msg+="\n"+d.first+": "+d.second;return std::runtime_error(msg);}
+std::runtime_error error(const ISFErr& e){std::string msg=e.general+": "+e.specific;for(const auto& d:e.details)if(d.first.find("ErrLog")!=std::string::npos)msg+="\n"+d.first+": "+d.second.substr(0,4096);return std::runtime_error(msg);}
 }
 struct IsfRuntime::Impl {
  Pool pool;std::shared_ptr<const IsfSource> source;std::shared_ptr<VVISF::ISFScene> scene;VVISF::ISFDocRef doc;

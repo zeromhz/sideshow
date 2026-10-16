@@ -48,6 +48,11 @@ struct Config {
         float ambientInterval = 2.5f;
     } fluid;
 
+    struct Isf {
+        std::string root="/opt/sideshow/isf",preset="examples/plasma.fs";
+        int maxWidth=1280,maxHeight=720;
+    } isf;
+
     struct Video {
         std::string root = "/opt/sideshow/videos";
         std::string preset;

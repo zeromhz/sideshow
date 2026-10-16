@@ -92,3 +92,20 @@ TEST_CASE("Superseded and failed video preparation cannot activate later") {
     state->state=PreparationState::Failed;v.maintenance();CHECK(v.mode()==VisualMode::Milkdrop);
     v.apply(cmd::VideoPause{true});CHECK_FALSE(state->paused);
 }
+#include "support/pending_isf_backend.h"
+TEST_CASE("ISF pending controls and audio preserve the active visual until ready","[isf]") {
+ Config config;auto active=std::make_shared<PendingIsfState>(),pending=std::make_shared<PendingIsfState>();active->state=PreparationState::Ready;
+ std::vector<VisualMode> created;
+ VisualController controller(config,320,180,[&](VisualMode mode,const BackendInit& init){created.push_back(mode);return std::make_unique<PendingIsfBackend>(init,mode==VisualMode::Isf?pending:active,mode==VisualMode::Isf);});
+ controller.apply(cmd::IsfEvent{"reset"});CHECK(active->events==0);
+ REQUIRE(controller.setMode(VisualMode::Isf));controller.apply(cmd::Preset{"nested/a.fs"});controller.apply(cmd::IsfParam{"speed",{1.0f}});controller.apply(cmd::IsfEvent{"reset"});
+ CHECK(controller.mode()==VisualMode::Milkdrop);CHECK(pending->parameters==1);CHECK(pending->events==1);
+ float pcm[4]={};controller.addPcm(pcm,2);controller.clearAudioHistory();CHECK(active->audioFrames==2);CHECK(pending->audioFrames==2);CHECK(active->clears==1);CHECK(pending->clears==1);
+ pending->state=PreparationState::Ready;controller.maintenance();CHECK(controller.mode()==VisualMode::Isf);CHECK(controller.statusPreset()=="isf/nested/a.fs");
+ auto count=created.size();controller.setMode(VisualMode::Isf);CHECK(created.size()==count);
+}
+TEST_CASE("ISF startup prepares over MilkDrop fallback","[isf]") {
+ Config c;c.visuals.mode=VisualMode::Isf;std::vector<VisualMode> created;
+ VisualController v(c,320,180,[&](VisualMode m,const BackendInit& i){created.push_back(m);auto s=std::make_shared<PendingIsfState>();s->state=m==VisualMode::Isf?PreparationState::Pending:PreparationState::Ready;return std::make_unique<PendingIsfBackend>(i,s,m==VisualMode::Isf);});
+ CHECK(created==std::vector<VisualMode>{VisualMode::Milkdrop,VisualMode::Isf});CHECK(v.mode()==VisualMode::Milkdrop);v.setMode(VisualMode::Milkdrop);v.maintenance();CHECK(v.mode()==VisualMode::Milkdrop);
+}
