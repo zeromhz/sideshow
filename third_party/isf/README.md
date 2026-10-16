@@ -26,3 +26,13 @@ Compile-only checks use Khronos OpenGL-Registry revision
 6af574a14089ccfee87efe230ebcdd8742859813 and EGL-Registry revision
 db3425b8246136faccb5e2782b5694960bd6edf1. Those headers are test scratch,
 not shipped dependencies. Pi execution remains unverified.
+
+Patch 0002 supplies an allocation-reservation callback whose lease follows buffers
+through pool copies; validated import callbacks replace filesystem image loading.
+It adds dimension preflight/rollback and host-controlled frame uniforms, checks
+framebuffer completeness, preserves FLOAT precision in pass initialization, bounds
+header-comment parsing, and avoids zero-height backing arithmetic for non-image
+buffers. No global pool is installed.
+
+Observed missing defaults: float 0.5 (with absent bounds), bool true, long 0,
+point2D (0,0), color transparent black. Declared defaults remain application metadata.
