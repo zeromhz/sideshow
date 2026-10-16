@@ -101,3 +101,9 @@ TEST_CASE("OSC: playlist and preset need a non-empty string") {
     CHECK_FALSE(parse("/sideshow/all/playlist", {int32_t{3}}));
     CHECK_FALSE(parse("/sideshow/all/preset", {std::string("")}));
 }
+
+TEST_CASE("OSC accepts supported visualization modes only") {
+    CHECK(parseOscMessage("panel-01", "/sideshow/all/mode", {std::string("fluid")}));
+    CHECK(parseOscMessage("panel-01", "/sideshow/all/mode", {std::string("milkdrop")}));
+    CHECK_FALSE(parseOscMessage("panel-01", "/sideshow/all/mode", {std::string("browser")}));
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "visual_mode.h"
 #include <chrono>
 #include <cstddef>
 #include <mutex>
@@ -11,6 +12,7 @@
 namespace sideshow {
 
 namespace cmd {
+struct Mode { VisualMode value; };
 struct Next {};
 struct Prev {};
 struct Random {};
@@ -24,7 +26,7 @@ struct BeatSensitivity { float value; };
 struct HardCut { bool on; };
 }  // namespace cmd
 
-using Command = std::variant<cmd::Next, cmd::Prev, cmd::Random, cmd::Lock, cmd::Playlist,
+using Command = std::variant<cmd::Mode, cmd::Next, cmd::Prev, cmd::Random, cmd::Lock, cmd::Playlist,
                              cmd::Preset, cmd::Blackout, cmd::Master, cmd::Duration,
                              cmd::BeatSensitivity, cmd::HardCut>;
 

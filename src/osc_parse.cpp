@@ -49,7 +49,10 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
     if (args.size() != 1) return std::nullopt;
     const OscArg& arg = args[0];
 
-    if (name == "lock") {
+    if (name == "mode") {
+        if (auto s = asNonEmptyString(arg))
+            if (auto mode = parseVisualMode(*s)) return cmd::Mode{*mode};
+    } else if (name == "lock") {
         if (auto b = asBool(arg)) return cmd::Lock{*b};
     } else if (name == "blackout") {
         if (auto b = asBool(arg)) return cmd::Blackout{*b};

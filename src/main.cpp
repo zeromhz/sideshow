@@ -54,6 +54,7 @@ void applyCommand(const Command& command, PresetManager& presets, Renderer& rend
                   OutputLevel& output) {
     std::visit(
         Overloaded{
+            [&](const cmd::Mode&) { logWarn("fluid mode integration pending"); },
             [&](const cmd::Next&) { presets.next(); },
             [&](const cmd::Prev&) { presets.prev(); },
             [&](const cmd::Random&) { presets.random(); },
