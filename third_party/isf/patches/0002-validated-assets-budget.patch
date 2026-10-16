@@ -1,0 +1,251 @@
+--- a/VVGL/include/GLBuffer.hpp
++++ b/VVGL/include/GLBuffer.hpp
+@@ -191,6 +191,7 @@
+ 		GLBufferPoolRef		parentBufferPool = nullptr;
+ 		//	If this GLBuffer was created by copying another buffer using GLBufferCopy(), the original source buffer is retained here.  If you copy a copy, the original GLBuffer is retained here.  If this is non-null, none of the resources in this buffer will be released when it is destroyed- they will only be released when the final 'copySourceBuffer' instance is destroyed!
+ 		GLBufferRef			copySourceBuffer = nullptr;
++        std::shared_ptr<void> allocationLease;
+ 		//	The 'copySourceBuffer' ivar above is used logically to determine if the backend resources should be released (if it is non-null then any associated backend resources will, by definition, not be freed).  Sometimes, you just want to retain one buffer with another- for example, IOSurface-backed GL textures need to be tracked in pairs, lest the "source" IOSurface get recycled and inadvertently update the other corresponding IOSurface-backed tex.  This is a simple strong relationship- 'associatedBuffer' is destroyed when its owner is destroyed.
+ 		GLBufferRef			associatedBuffer = nullptr;
+ 		int					idleCount = 0;
+--- a/VVGL/include/GLBufferPool.hpp
++++ b/VVGL/include/GLBufferPool.hpp
+@@ -41,7 +41,7 @@
+ - Don't forget to call the housekeeping() member function on your buffer pools periodically!
+ - GLBufferPool requires a GL context on creation- the pool maintains a strong ref to this context, and will use it to create/destroy GL resources unless instructed otherwise via the "createInCurrentContext" variable in the various buffer creation functions.
+ */
+-class VVGL_EXPORT GLBufferPool	{
++class VVGL_EXPORT GLBufferPool : public std::enable_shared_from_this<GLBufferPool> {
+ 	
+ 	//	vars
+ 	protected:
+@@ -67,7 +67,8 @@
+ 		inline void prepareToBeDeleted() { _deleted=true; purge(); }
+ 		
+ 		//!	This member function is how the pool creates buffers.  You probably shouldn't call this function directly- instead use one of the functions in (\ref VVGL_BUFFERCREATE) directly or as a prototype.  They're in %GLBufferPool.hpp/GLBufferPool.cpp.
+-		GLBufferRef createBufferRef(const GLBuffer::Descriptor & desc, const Size & size={640,480}, const void * backingPtr=nullptr, const Size & backingSize={640,480}, const bool & createInCurrentContext=false);
++		std::function<std::shared_ptr<void>(const GLBuffer::Descriptor&,const Size&)> reserveStorage;
++        GLBufferRef createBufferRef(const GLBuffer::Descriptor & desc, const Size & size={640,480}, const void * backingPtr=nullptr, const Size & backingSize={640,480}, const bool & createInCurrentContext=false);
+ 		GLBufferRef fetchMatchingFreeBuffer(const GLBuffer::Descriptor & desc, const Size & size);
+ 		
+ 		//!	You must call this periodically (once per render loop after you finish drawing is usually a good time to call this).  This function frees any buffers that have been sitting unused in the pool for "too long".
+--- a/VVGL/src/GLBuffer.cpp
++++ b/VVGL/src/GLBuffer.cpp
+@@ -126,6 +126,7 @@
+ GLBuffer::GLBuffer(const GLBuffer & n)	{
+ 	//cout << __PRETTY_FUNCTION__ << endl;
+ 	
++	allocationLease = n.allocationLease;
+ 	desc = n.desc;
+ 	name = n.name;
+ 	preferDeletion = n.preferDeletion;
+--- a/VVGL/src/GLBufferPool.cpp
++++ b/VVGL/src/GLBufferPool.cpp
+@@ -92,7 +92,9 @@
+ 	//	...if i'm here then i couldn't find a free buffer, and i need to create one
+ 	
+ 	//	make the buffer
+-	returnMe = make_shared<GLBuffer>();
++	returnMe = make_shared<GLBuffer>(shared_from_this());
++    returnMe->preferDeletion = true;
++    if (reserveStorage) returnMe->allocationLease = reserveStorage(d,s);
+ 	//	copy the passed descriptor to the buffer i just created
+ 	GLBuffer::Descriptor 		&newBufferDesc = returnMe->desc;
+ 	newBufferDesc = d;
+@@ -115,10 +117,10 @@
+ #if defined(VVGL_SDK_MAC)
+ 	IOSurfaceRef		newSurfaceRef = nullptr;
+ 	uint32_t			cpuBackingSize = returnMe->backingLengthForSize(bs);
+-	uint32_t			bytesPerRow = cpuBackingSize/bs.height;
++	uint32_t			bytesPerRow = (bs.height>0 ? cpuBackingSize/bs.height : 0);
+ 	if (bs == VVGL::Size(0,0))	{
+ 		cpuBackingSize = returnMe->backingLengthForSize(s);
+-		bytesPerRow = cpuBackingSize/s.height;
++		bytesPerRow = (s.height>0 ? cpuBackingSize/s.height : 0);
+ 	}
+ #endif
+ 	uint32_t			pixelFormat = 0x00;
+@@ -435,7 +437,9 @@
+ 	}
+ #endif
+ 	
+-	return returnMe;
++	if (glGetError()!=GL_NO_ERROR) throw std::runtime_error("ISF GL allocation failed");
++    returnMe->preferDeletion = false;
++    return returnMe;
+ }
+ 
+ 
+--- a/VVGL/src/GLScene.cpp
++++ b/VVGL/src/GLScene.cpp
+@@ -713,6 +713,7 @@
+ 			GLERRLOG
+ 		}
+ 		
++		if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) throw std::runtime_error("ISF framebuffer unsupported");
+ 		/*
+ 		GLenum		check = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+ 		GLERRLOG
+--- a/VVISF/include/ISFDoc.hpp
++++ b/VVISF/include/ISFDoc.hpp
+@@ -197,7 +197,7 @@
+ 		*/
+ 		bool generateShaderSource(std::string * outFragSrc, std::string * outVertSrc, VVGL::GLVersion & inGLVers, const bool & inVarsAsUBO=false);
+ 		//	this method must be called before rendering (passes/etc may have expressions that require the render dims to be evaluated)
+-		void evalBufferDimensionsWithRenderSize(const VVGL::Size & inSize);
++		void evalBufferDimensionsWithRenderSize(const VVGL::Size & inSize, bool allocate=true);
+ 		
+ 		VVISF_EXPORT friend std::ostream & operator<<(std::ostream & os, const ISFDoc & n);
+ 		
+--- a/VVISF/include/ISFPassTarget.hpp
++++ b/VVISF/include/ISFPassTarget.hpp
+@@ -87,7 +87,8 @@
+ 		//!	Returns the GLBuffer currently cached with this pass, or null.
+ 		VVGL::GLBufferRef & buffer() { return _buffer; }
+ 		//!	Sets the GLBuffer currently cached with this pass.
+-		void setBuffer(const VVGL::GLBufferRef & n) { _buffer=n; }
++		void restoreHostSize(const VVGL::Size& s) { _targetWidth=s.width; _targetHeight=s.height; }
++        void setBuffer(const VVGL::GLBufferRef & n) { _buffer=n; }
+ 		
+ 		//!	Returns the last-calculated target size for this pass.
+ 		VVGL::Size targetSize() { return { _targetWidth, _targetHeight }; }
+--- a/VVISF/include/ISFScene.hpp
++++ b/VVISF/include/ISFScene.hpp
+@@ -82,6 +82,10 @@
+ 		void useFile(const std::string & inPath, const bool & inThrowExc=true, const bool & inResetTimer=true) noexcept(false);
+ 		//!	Starts using the ISF file represented by the passed ISFDoc.
+ 		void useDoc(ISFDocRef & inDoc);
++        std::function<VVGL::GLBufferRef(const std::string&)> validatedImport;
++        bool hostFrame=false;
++        double hostTime=0,hostDelta=0;
++        uint64_t hostIndex=0;
+ 		//!	Returns the ISFDoc currently being used by the scene.  Interacting with this doc by setting the value of its inputs will directly affect rendering.
+ 		inline ISFDocRef doc() { std::lock_guard<std::mutex> lock(_propertyLock); return _doc; }
+ 		
+--- a/VVISF/src/ISFDoc.cpp
++++ b/VVISF/src/ISFDoc.cpp
+@@ -1186,7 +1186,7 @@
+ }
+ 
+ 
+-void ISFDoc::evalBufferDimensionsWithRenderSize(const VVGL::Size & inSize)	{
++void ISFDoc::evalBufferDimensionsWithRenderSize(const VVGL::Size & inSize, bool allocate)	{
+ 	//cout << __FUNCTION__ << "- " << inSize << endl;
+ 	lock_guard<recursive_mutex>		lock(_propLock);
+ 	
+@@ -1206,11 +1206,11 @@
+ 	
+ 	//	make sure that the persistent buffers are sized appropriately
+ 	for (const auto & targetBufIt : _persistentPassTargets)	{
+-		targetBufIt->evalTargetSize(inSize, subDict, true, true);
++		targetBufIt->evalTargetSize(inSize, subDict, allocate, allocate);
+ 	}
+ 	//	make sure that the temp buffers are sized appropriately
+ 	for (const auto & targetBufIt : _tempPassTargets)	{
+-		targetBufIt->evalTargetSize(inSize, subDict, true, true);
++		targetBufIt->evalTargetSize(inSize, subDict, allocate, allocate);
+ 	}
+ 	
+ 	//cout << "\t" << __FUNCTION__ << "- FINISHED\n";
+@@ -1238,13 +1238,8 @@
+ 			return;
+ 	}
+ 	//	we need to advance 'closeCommentLineEnd' to include both the full "close comment" as well as the next "line break"
+-	auto			tmpIt = inRawFile.begin();
+-	tmpIt += closeCommentIndex;
+-	while (*tmpIt!='\n' && *tmpIt!='\r')
+-		++tmpIt;
+-	++tmpIt;
+-	auto			closeCommentLineEnd = std::min( long(tmpIt - inRawFile.begin()), long(inRawFile.size()-1) );
+-	
++	auto closeCommentLineEnd = closeCommentIndex+2;
++
+ 	_jsonSourceString = new string(inRawFile, 0, closeCommentLineEnd);
+ 	_jsonString = new string(inRawFile, openCommentIndex+2, closeCommentIndex - (openCommentIndex+2) );
+ 	_fragShaderSource = new string(inRawFile, closeCommentLineEnd);
+@@ -1492,7 +1487,7 @@
+ 							}
+ 						}
+ 						//	make a cube texture from the array of paths
+-						importedBuffer = CreateCubeTexFromImagePaths(fullPaths);
++						throw ISFErr(ISFErrType_ErrorLoading,"Cube imports unsupported","");
+ 						if (importedBuffer == nullptr)	{
+ 							if (_throwExcept)	{
+ 								if (_path != nullptr)
+@@ -1534,7 +1529,9 @@
+ 							if (bp == nullptr)
+ 								bp = GetGlobalBufferPool();
+ 						}
+-						importedBuffer = CreateTexFromImage(fullPath, false, bp);
++						if (!_parentScene || !_parentScene->validatedImport)
++                            throw ISFErr(ISFErrType_ErrorLoading,"Validated import provider required",fullPath);
++                        importedBuffer = _parentScene->validatedImport(samplerNameJ.get<string>());
+ 						if (importedBuffer == nullptr)	{
+ 							if (_throwExcept)
+ 								throw ISFErr(ISFErrType_ErrorLoading, "IMPORTED file cannot be loaded: ", fullPath);
+--- a/VVISF/src/ISFPassTarget.cpp
++++ b/VVISF/src/ISFPassTarget.cpp
+@@ -77,8 +77,11 @@
+ 	//using namespace VVISF;
+ 	using namespace std;
+ 	
+-	_targetWidth = inSize.width;
+-	_targetHeight = inSize.height;
++	if (!std::isfinite(inSize.width)||!std::isfinite(inSize.height)||inSize.width<1||inSize.height<1||inSize.width>4096||inSize.height>4096)
++        throw std::runtime_error("ISF pass dimensions outside limits");
++    _targetWidth = std::floor(inSize.width);
++	_targetHeight = std::floor(inSize.height);
++    if(!inResize && !inCreateNewBuffer) return;
+ 	
+ 	
+ 	//	figure out what pool/copier to use to do stuff- try to use the resources associated with my parent doc's parent scene (if there is one)
+@@ -91,7 +94,7 @@
+ 		if (parentScene != nullptr)	{
+ 			bp = parentScene->privatePool();
+ 			copier = parentScene->privateCopier();
+-			shouldBeFloat = parentScene->alwaysRenderToFloat();
++			shouldBeFloat = _floatFlag || parentScene->alwaysRenderToFloat();
+ 			shouldBeIOSurface = parentScene->persistentToIOSurface();
+ 		}
+ 	}
+@@ -246,7 +249,7 @@
+ 			if (parentScene != nullptr)	{
+ 				bp = parentScene->privatePool();
+ 				copier = parentScene->privateCopier();
+-				shouldBeFloat = parentScene->alwaysRenderToFloat();
++				shouldBeFloat = _floatFlag || parentScene->alwaysRenderToFloat();
+ 				shouldBeIOSurface = parentScene->persistentToIOSurface();
+ 			}
+ 		}
+@@ -333,11 +336,7 @@
+ 			ExpressionUpdater(&_targetHeightString, &_targetHeightExpression, inSymbols, &(newSize.height));
+ 		}
+ 	}
+-	if (std::isnan(newSize.width))
+-		newSize.width = 1.;
+-	if (std::isnan(newSize.height))
+-		newSize.height = 1.;
+-	
++
+ 	//	set the target size based on the new size i just calculated
+ 	//cout << "\tsetting target size to " << newSize << endl;
+ 	setTargetSize(newSize, inResize, inCreateNewBuffer);
+--- a/VVISF/src/ISFScene.cpp
++++ b/VVISF/src/ISFScene.cpp
+@@ -1203,6 +1203,7 @@
+ 		_renderSize = inSize;
+ 		_renderTimeDelta = (inTime<=0.) ? 0. : fabs(inTime-_renderTime);
+ 		_renderTime = inTime;
++        if(hostFrame){_renderTime=hostTime;_renderTimeDelta=hostDelta;_renderFrameIndex=hostIndex;}
+ 		
+ 		//	get the buffer pool we're going to use to generate the buffers
+ 		GLBufferPoolRef		bp = _privatePool;
+@@ -1220,7 +1221,7 @@
+ 		_context->makeCurrentIfNotCurrent();
+ 		
+ 		//	tell the doc to evaluate its buffers with the passed render size
+-		tmpDoc->evalBufferDimensionsWithRenderSize(_renderSize);
++		if(!hostFrame) tmpDoc->evalBufferDimensionsWithRenderSize(_renderSize);
+ 		
+ 		//	clear the passed dict of render passes (we'll be placing the rendered content from each pass in it as we progress)
+ 		if (outPassDict != nullptr)

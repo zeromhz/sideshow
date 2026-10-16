@@ -11,6 +11,7 @@ public:
     void maintenance();
     void addPcm(const float* stereo,size_t frames);
     void render(float dt);
+    void clearAudioHistory();
     void resize(int width,int height);
     VisualMode mode() const { return mode_; }
     std::string statusPreset() const;

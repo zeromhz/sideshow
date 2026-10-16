@@ -40,6 +40,22 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
     const std::string name = rest.substr(slash + 1);
     if (target != "all" && target != panelId) return std::nullopt;
 
+    if (name == "isf_param") {
+        if (args.size()!=2 && args.size()!=3 && args.size()!=5) return std::nullopt;
+        auto input=asNonEmptyString(args[0]); if(!input) return std::nullopt;
+        cmd::IsfParam command{*input,{}};
+        for(size_t n=1;n<args.size();++n) {
+            if(auto i=std::get_if<int32_t>(&args[n])) command.values.emplace_back(*i);
+            else if(auto f=std::get_if<float>(&args[n]);f&&std::isfinite(*f)) command.values.emplace_back(*f);
+            else return std::nullopt;
+        }
+        return command;
+    }
+    if (name == "isf_event") {
+        if(args.size()!=1) return std::nullopt;
+        if(auto input=asNonEmptyString(args[0])) return cmd::IsfEvent{*input};
+        return std::nullopt;
+    }
     if (args.empty()) {
         if (name == "video_restart") return cmd::VideoRestart{};
         if (name == "next") return cmd::Next{};

@@ -1,0 +1,1 @@
+stb_image.h pinned from nothings/stb commit 2c980bb59875b0d32144a71867fbdebb2f77cd20. MIT or public-domain dual license; LICENSE retained. Built PNG/JPEG only, no filesystem API, maximum dimension 4096. All decoding consumes bounded validated memory snapshots.

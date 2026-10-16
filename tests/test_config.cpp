@@ -153,3 +153,8 @@ TEST_CASE("Video configuration defaults and validated selections") {
     CHECK(invalid.config.video.preset.empty());
     CHECK(invalid.config.video.end == VideoEnd::Loop);
 }
+TEST_CASE("ISF configuration validates mode library and render bounds","[isf]") {
+ auto r=sideshow::parseConfig("[visuals]\nmode='isf'\n[isf]\nroot='/tmp/shaders'\npreset='nested/a.fs'\nmax_width=640\nmax_height=480\n");
+ CHECK(r.warnings.empty());CHECK(r.config.visuals.mode==sideshow::VisualMode::Isf);CHECK(r.config.isf.maxWidth==640);CHECK(r.config.isf.preset=="nested/a.fs");
+ auto bad=sideshow::parseConfig("[isf]\nmax_width=4097\nmax_height=0\npreset='../a.fs'\n");CHECK(bad.warnings.size()==3);CHECK(bad.config.isf.maxWidth==1280);
+}

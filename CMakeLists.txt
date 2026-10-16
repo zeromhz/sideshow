@@ -11,6 +11,7 @@ option(SIDESHOW_BUILD_VIDEO_TESTS "Build FFmpeg decoder and worker tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
+include(cmake/IsfSource.cmake)
 
 FetchContent_Declare(tomlplusplus
     GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
@@ -20,6 +21,16 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/isf_playback.cpp
+    src/isf_budget.cpp
+    src/isf_images.cpp
+    src/isf_loader.cpp
+    src/isf_parameters.cpp
+    src/isf_audio.cpp
+    src/isf_fft.cpp
+    src/isf_document.cpp
+    src/isf_catalog.cpp
+    src/isf_files.cpp
     src/video_playback.cpp
     src/video_types.cpp
     src/video_catalog.cpp
@@ -36,6 +47,9 @@ add_library(sideshow_core STATIC
     src/display_mode.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
+target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+find_package(Threads REQUIRED)
+target_link_libraries(sideshow_core PUBLIC Threads::Threads)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
 
@@ -109,6 +123,14 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_isf_playback.cpp
+        tests/test_isf_budget.cpp
+        tests/test_isf_images.cpp
+        tests/test_isf_loader.cpp
+        tests/test_isf_parameters.cpp
+        tests/test_isf_audio.cpp
+        tests/test_isf_document.cpp
+        tests/test_isf_catalog.cpp
         tests/test_video_catalog.cpp
         tests/test_video_playback.cpp
         tests/test_visual_controller.cpp
@@ -122,6 +144,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_preset_catalog.cpp
         tests/test_display_mode.cpp
     )
+    target_compile_definitions(sideshow_tests PRIVATE ISF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/isf")
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
     include(Catch)
@@ -142,4 +165,38 @@ if(SIDESHOW_BUILD_TESTS)
     target_include_directories(sideshow_preset_tests PRIVATE tests/support)
     target_link_libraries(sideshow_preset_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     catch_discover_tests(sideshow_preset_tests)
+endif()
+
+option(SIDESHOW_BUILD_ISF_TESTS "Build real-context ISF tests" OFF)
+if(SIDESHOW_BUILD_PLAYER OR SIDESHOW_BUILD_ISF_TESTS)
+    include(cmake/IsfDependencies.cmake)
+endif()
+if(SIDESHOW_BUILD_ISF_TESTS)
+    find_package(SDL2 REQUIRED)
+    add_executable(sideshow_isf_context_tests tests/test_isf_context_gl.cpp)
+    target_include_directories(sideshow_isf_context_tests PRIVATE src)
+    target_link_libraries(sideshow_isf_context_tests PRIVATE SDL2::SDL2 sideshow_isf_context)
+endif()
+if(SIDESHOW_BUILD_PLAYER AND SIDESHOW_BUILD_TESTS)
+    add_executable(sideshow_isf_wire_tests tests/test_isf_osc_wire.cpp src/osc_server.cpp)
+    target_link_libraries(sideshow_isf_wire_tests PRIVATE sideshow_core PkgConfig::LIBLO Catch2::Catch2WithMain)
+    catch_discover_tests(sideshow_isf_wire_tests)
+endif()
+if(SIDESHOW_BUILD_PLAYER OR SIDESHOW_BUILD_ISF_TESTS)
+    add_library(sideshow_isf_runtime STATIC src/isf_runtime.cpp src/isf_presenter.cpp src/fluid_gl.cpp src/fluid_shaders.cpp)
+    target_link_libraries(sideshow_isf_runtime PUBLIC sideshow_isf_context sideshow_core)
+    target_sources(sideshow_isf_runtime PRIVATE src/isf_backend.cpp)
+endif()
+if(SIDESHOW_BUILD_ISF_TESTS)
+    add_executable(sideshow_isf_runtime_tests tests/test_isf_runtime_gl.cpp)
+    target_compile_definitions(sideshow_isf_runtime_tests PRIVATE ISF_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/isf")
+    target_link_libraries(sideshow_isf_runtime_tests PRIVATE sideshow_isf_runtime SDL2::SDL2)
+endif()
+if(SIDESHOW_BUILD_ISF_TESTS)
+    add_executable(sideshow_isf_backend_tests tests/test_isf_backend_gl.cpp)
+    target_link_libraries(sideshow_isf_backend_tests PRIVATE sideshow_isf_runtime SDL2::SDL2)
+endif()
+
+if(SIDESHOW_BUILD_PLAYER)
+    target_link_libraries(sideshow-player PRIVATE sideshow_isf_runtime)
 endif()

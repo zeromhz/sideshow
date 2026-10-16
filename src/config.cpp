@@ -1,3 +1,4 @@
+#include "isf_document.h"
 #include "config.h"
 #include "fluid_presets.h"
 
@@ -103,6 +104,14 @@ ConfigResult parseConfig(std::string_view tomlText) {
     readKey(root, "output", "master_smoothing_ms", c.output.masterSmoothingMs,
             [](float v) { return v >= 0.0f && v <= 5000.0f; }, w);
 
+    readKey(root,"isf","root",c.isf.root,nonEmpty,w);
+    readKey(root,"isf","preset",c.isf.preset,[](const std::string& v){return v.empty()||validIsfId(v);},w);
+    auto isfDimension=[&](const char* key,int& value){
+        auto node=root["isf"][key];
+        if(node&&!node.is_integer()){w.push_back(std::string("isf.")+key+": expected integer, using default");return;}
+        readKey(root,"isf",key,value,[](int n){return n>0&&n<=4096;},w);
+    };
+    isfDimension("max_width",c.isf.maxWidth);isfDimension("max_height",c.isf.maxHeight);
     readKey(root, "video", "root", c.video.root, nonEmpty, w);
     readKey(root, "video", "preset", c.video.preset,
             [](const std::string& v) { return v.empty() || validVideoId(v); }, w);

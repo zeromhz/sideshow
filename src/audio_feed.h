@@ -13,8 +13,8 @@ public:
     explicit AudioFeed(size_t maxFrames) : pcm_(maxFrames * 2) {}
 
     template <typename Submit>
-    void update(AudioRing& ring, bool captureActive, float dtSeconds, Submit&& submit) {
-        if (pcm_.empty()) return;
+    bool update(AudioRing& ring, bool captureActive, float dtSeconds, Submit&& submit) {
+        if (pcm_.empty()) return false;
         // Drain only this frame's snapshot; a concurrent capture callback must
         // not keep the rendering thread here indefinitely.
         size_t remaining = ring.size();
@@ -41,7 +41,9 @@ public:
                 silenceFrames -= frames;
             }
             idleSeconds_ = 0.250f;
+            return false;
         }
+        return true;
     }
 
 private:

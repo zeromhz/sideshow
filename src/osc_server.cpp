@@ -37,6 +37,11 @@ int OscServer::handle(const char* path, const char* types, lo_arg** argv, int ar
         return 0;
     }
 
+    const std::string address(path);
+    const auto suffix=address.substr(address.find_last_of('/')+1);
+    if(suffix=="isf_param" || suffix=="isf_event") {
+        for(int i=0;i<argc;++i) if(types[i]!=LO_STRING && types[i]!=LO_INT32 && types[i]!=LO_FLOAT) return 0;
+    }
     std::vector<OscArg> args;
     for (int i = 0; i < argc; ++i) {
         switch (types[i]) {

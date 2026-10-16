@@ -1,6 +1,7 @@
 #pragma once
 #include "config.h"
 #include "video_control.h"
+#include "isf_control.h"
 #include <functional>
 #include <memory>
 namespace sideshow {
@@ -17,6 +18,8 @@ class VisualBackend {
 public:
     virtual ~VisualBackend() = default;
     virtual PreparationResult preparation() { return {PreparationState::Ready,{}}; }
+    virtual IsfControl* isfControl() { return nullptr; }
+    virtual void clearAudioHistory() {}
     virtual VideoControl* videoControl() { return nullptr; }
     virtual void maintenance() = 0;
     virtual void addPcm(const float*, size_t) = 0;

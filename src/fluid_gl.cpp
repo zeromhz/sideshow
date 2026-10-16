@@ -28,7 +28,14 @@ Program::Program(const char* vertex,const char* fragment,const std::string& defi
     } catch(...) {if(v)glDeleteShader(v);if(f)glDeleteShader(f);if(id_)glDeleteProgram(id_);throw;}
     glDeleteShader(v);glDeleteShader(f);
 }
-Program::~Program(){if(id_)glDeleteProgram(id_);}
+Program::~Program(){
+    if(!id_)return;
+    // A deleted current program remains bound until the next use. A later state
+    // guard could capture that dying name and try to restore it after deletion.
+    GLint current=0;glGetIntegerv(GL_CURRENT_PROGRAM,&current);
+    if(GLuint(current)==id_)glUseProgram(0);
+    glDeleteProgram(id_);
+}
 void Program::texture(const char* n,GLuint t,int unit) const {glActiveTexture(GL_TEXTURE0+unit);glBindSampler(unit,0);glBindTexture(GL_TEXTURE_2D,t);glUniform1i(location(n),unit);}
 GLenum externalFormat(GLenum f){return f==GL_R16F?GL_RED:f==GL_RG16F?GL_RG:GL_RGBA;}
 Target::Target(int w,int h,GLenum internal,GLenum format,bool linear):width(w),height(h) {

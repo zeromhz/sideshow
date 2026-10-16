@@ -132,3 +132,9 @@ TEST_CASE("AudioFeed clears projectM's full retained waveform across submission 
     REQUIRE(retained.read(waveform.data(), waveform.size()) == 1152);
     CHECK(std::all_of(waveform.begin(), waveform.end(), [](float sample) { return sample == 0.0f; }));
 }
+TEST_CASE("Audio feed exposes freshness across callback gaps stalls and reconnect","[isf]") {
+ sideshow::AudioRing ring(2048);sideshow::AudioFeed feed(480);auto submit=[](const float*,size_t){};
+ CHECK(feed.update(ring,true,.05f,submit));CHECK_FALSE(feed.update(ring,true,.25f,submit));CHECK_FALSE(feed.update(ring,false,0,submit));
+ float samples[4]={1,1,1,1};ring.write(samples,4);CHECK(feed.update(ring,true,.01f,submit));
+ sideshow::AudioFeed empty(0);CHECK_FALSE(empty.update(ring,true,0,submit));
+}

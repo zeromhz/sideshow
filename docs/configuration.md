@@ -71,7 +71,7 @@ smoothed master level. See [OSC control](../README.md#osc-control) for runtime o
 
 ```toml
 [visuals]
-mode = "milkdrop" # milkdrop | fluid | video
+mode = "milkdrop" # milkdrop | fluid | video | isf
 
 [fluid]
 preset = "light-show"
@@ -92,3 +92,12 @@ A failed switch keeps the active backend. Fluid startup failure falls back to Mi
 
 See [local video playback](video.md) for OSC controls, recursive folder semantics,
 configuration, FFmpeg dependencies, architecture limits and hardware validation.
+
+## ISF settings
+
+Set `[visuals] mode = "isf"` for ISF startup. `[isf]` accepts `root` (default
+`/opt/sideshow/isf`), `preset` (default `examples/plasma.fs`, otherwise exact relative `.fs` ID),
+`max_width` (1280) and `max_height` (720). Dimensions must be integers 1–4096;
+invalid values warn and retain defaults. Portrait swaps the caps. Development
+setup uses `deps/isf` and `examples/plasma.fs`. Restart after config or catalog
+changes. See [ISF controls, defaults and limits](isf.md).

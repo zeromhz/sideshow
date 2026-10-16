@@ -126,3 +126,23 @@ Retina drawable ran at approximately 59 FPS. This is a small desktop smoke test,
 not evidence of 1080p decoding throughput or Raspberry Pi performance. Development
 libraries were libavformat/libavcodec 63.1.102, libavutil 61.1.102, libswscale 10.1.102.
 Actual FFmpeg 5.1 compilation and Pi/GLES hardware checks remain outstanding.
+
+## ISF validation
+
+Enable `SIDESHOW_BUILD_ISF_TESTS=ON` for the real-context, runtime and backend
+executables: `sideshow_isf_context_tests`, `sideshow_isf_runtime_tests` and
+`sideshow_isf_backend_tests`. These need a real display/GL context. Pure metadata,
+file, audio, parameter, loader, playback and budget tests remain in `sideshow_tests`.
+Playback tests cover startup fallback, stale generations, rejected selections,
+queue capacity/order, shared validation, direct-folder navigation and timing without GL.
+VVISF is pinned in `cmake/IsfSource.cmake`; local patches are applied by
+`cmake/IsfDependencies.cmake`. Core-only builds consume its JSON header without
+linking the GL library. Linux uses modern EGL/GLES3, without Qt, GLFW or legacy
+Broadcom SDK requirements.
+
+Run `python3 tools/test_isf_osc_integration.py --run-live` for an opt-in windowed
+smoke test through the real OSC CLI. It uses a temporary library/config and local
+UDP port, terminates only its own player, and reports desktop FPS and RSS. Normal
+Python test discovery does not launch it. Pixel assertions live in GL tests;
+pong only confirms selection and liveness. See [validation evidence and pending
+hardware checks](superpowers/isf-validation.md).

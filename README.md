@@ -65,7 +65,7 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 | `duration` | float s | Seconds per preset (1–3600) |
 | `beat_sensitivity` | float | 0–2 |
 | `hardcut` | int 0/1 | Beat-triggered hard cuts (MilkDrop only) |
-| `mode` | string | `milkdrop`, `fluid`, or `video`; switch when ready |
+| `mode` | string | `milkdrop`, `fluid`, `video`, or `isf`; switch when ready |
 
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.
 Ints and floats are interchangeable for toggles and numbers.
@@ -173,3 +173,9 @@ Desktop validation does not establish Raspberry Pi performance; Pi/GLES hardware
 
 See [local video playback](docs/video.md) for OSC controls, recursive folder semantics,
 configuration, FFmpeg dependencies, architecture limits and hardware validation.
+
+## ISF shaders
+
+ISF mode plays local generators with microphone waveform/FFT inputs, typed OSC
+parameters, events and persistent feedback. Setup includes plasma, spectrum and
+feedback examples. See [ISF operation and limits](docs/isf.md).
