@@ -29,7 +29,7 @@ Program::Program(const char* vertex,const char* fragment,const std::string& defi
     glDeleteShader(v);glDeleteShader(f);
 }
 Program::~Program(){if(id_)glDeleteProgram(id_);}
-void Program::texture(const char* n,GLuint t,int unit) const {glActiveTexture(GL_TEXTURE0+unit);glBindTexture(GL_TEXTURE_2D,t);glUniform1i(location(n),unit);}
+void Program::texture(const char* n,GLuint t,int unit) const {glActiveTexture(GL_TEXTURE0+unit);glBindSampler(unit,0);glBindTexture(GL_TEXTURE_2D,t);glUniform1i(location(n),unit);}
 GLenum externalFormat(GLenum f){return f==GL_R16F?GL_RED:f==GL_RG16F?GL_RG:GL_RGBA;}
 Target::Target(int w,int h,GLenum internal,GLenum format,bool linear):width(w),height(h) {
     GLint limit=0;glGetIntegerv(GL_MAX_TEXTURE_SIZE,&limit);
@@ -52,8 +52,49 @@ Target::Target(Target&& o) noexcept {std::swap(texture,o.texture);std::swap(fbo,
 Target& Target::operator=(Target&& o) noexcept {std::swap(texture,o.texture);std::swap(fbo,o.fbo);std::swap(width,o.width);std::swap(height,o.height);return *this;}
 VertexArray::VertexArray(){glGenVertexArrays(1,&id_);}
 VertexArray::~VertexArray(){if(id_)glDeleteVertexArrays(1,&id_);}
-void resetState(){glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glDisable(GL_STENCIL_TEST);glDisable(GL_SCISSOR_TEST);glDisable(GL_CULL_FACE);glDisable(GL_RASTERIZER_DISCARD);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glBlendEquation(GL_FUNC_ADD);}
+void resetState(){glActiveTexture(GL_TEXTURE0);glDisable(GL_BLEND);glDisable(GL_DEPTH_TEST);glDisable(GL_STENCIL_TEST);glDisable(GL_SCISSOR_TEST);glDisable(GL_CULL_FACE);glDisable(GL_RASTERIZER_DISCARD);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glBlendEquation(GL_FUNC_ADD);}
+
+namespace {
+constexpr std::array<GLenum,7> trackedEnables={GL_BLEND,GL_DEPTH_TEST,GL_STENCIL_TEST,GL_SCISSOR_TEST,GL_CULL_FACE,GL_RASTERIZER_DISCARD,GL_DITHER};
+}
+StateGuard::StateGuard() {
+    glGetIntegerv(GL_ACTIVE_TEXTURE,&active_);
+    glGetIntegerv(GL_CURRENT_PROGRAM,&program_);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING,&vao_);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&drawFbo_);
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,&readFbo_);
+    glGetIntegerv(GL_VIEWPORT,viewport_.data());
+    glGetBooleanv(GL_COLOR_WRITEMASK,colorMask_.data());
+    for(size_t i=0;i<trackedEnables.size();++i)enabled_[i]=glIsEnabled(trackedEnables[i]);
+    glGetIntegerv(GL_BLEND_SRC_RGB,&srcRgb_);glGetIntegerv(GL_BLEND_DST_RGB,&dstRgb_);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA,&srcAlpha_);glGetIntegerv(GL_BLEND_DST_ALPHA,&dstAlpha_);
+    glGetIntegerv(GL_BLEND_EQUATION_RGB,&equationRgb_);glGetIntegerv(GL_BLEND_EQUATION_ALPHA,&equationAlpha_);
+    for(size_t i=0;i<textures_.size();++i) {
+        glActiveTexture(GL_TEXTURE0+static_cast<GLenum>(i));
+        glGetIntegerv(GL_TEXTURE_BINDING_2D,&textures_[i]);
+        glGetIntegerv(GL_SAMPLER_BINDING,&samplers_[i]);
+    }
+    glActiveTexture(active_);
+}
+StateGuard::~StateGuard() {
+    for(size_t i=0;i<textures_.size();++i) {
+        glActiveTexture(GL_TEXTURE0+static_cast<GLenum>(i));
+        glBindTexture(GL_TEXTURE_2D,textures_[i]);glBindSampler(static_cast<GLuint>(i),samplers_[i]);
+    }
+    glActiveTexture(active_);glUseProgram(program_);glBindVertexArray(vao_);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER,drawFbo_);glBindFramebuffer(GL_READ_FRAMEBUFFER,readFbo_);
+    glViewport(viewport_[0],viewport_[1],viewport_[2],viewport_[3]);
+    glColorMask(colorMask_[0],colorMask_[1],colorMask_[2],colorMask_[3]);
+    for(size_t i=0;i<trackedEnables.size();++i) {
+        if(enabled_[i])glEnable(trackedEnables[i]);else glDisable(trackedEnables[i]);
+    }
+    glBlendFuncSeparate(srcRgb_,dstRgb_,srcAlpha_,dstAlpha_);
+    glBlendEquationSeparate(equationRgb_,equationAlpha_);
+}
+
 Capabilities probeCapabilities() {
+    StateGuard restore;
+    resetState();
     Capabilities c;
     // Float attachment completeness is a runtime property, even with advertised extensions.
     auto supported=[](GLenum f){try{Target t(2,2,f,externalFormat(f),false);return true;}catch(const std::exception&){while(glGetError()!=GL_NO_ERROR){}return false;}};
@@ -61,9 +102,6 @@ Capabilities probeCapabilities() {
     if(!supported(GL_R16F))c.scalar=GL_RGBA16F;
     if(!supported(GL_RG16F))c.vector=GL_RGBA16F;
     // Probe interpolation by sampling halfway between a black and white float texel.
-    GLint oldFbo=0,oldTex=0,oldProgram=0,oldVao=0,oldViewport[4];
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING,&oldFbo);glGetIntegerv(GL_TEXTURE_BINDING_2D,&oldTex);
-    glGetIntegerv(GL_CURRENT_PROGRAM,&oldProgram);glGetIntegerv(GL_VERTEX_ARRAY_BINDING,&oldVao);glGetIntegerv(GL_VIEWPORT,oldViewport);
     {
         Target source(2,1,GL_RGBA16F,GL_RGBA,true),dest(1,1,GL_RGBA16F,GL_RGBA,false);
         float ramp[]={0,0,0,1,1,1,1,1};glBindTexture(GL_TEXTURE_2D,source.texture);
@@ -73,7 +111,6 @@ Capabilities probeCapabilities() {
         float pixel[4]={};glReadPixels(0,0,1,1,GL_RGBA,GL_FLOAT,pixel);
         c.linear=glGetError()==GL_NO_ERROR && std::abs(pixel[0]-.5f)<.05f;
     }
-    glBindFramebuffer(GL_FRAMEBUFFER,oldFbo);glBindTexture(GL_TEXTURE_2D,oldTex);glUseProgram(oldProgram);glBindVertexArray(oldVao);glViewport(oldViewport[0],oldViewport[1],oldViewport[2],oldViewport[3]);
     return c;
 }
 }

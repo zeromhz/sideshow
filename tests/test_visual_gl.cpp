@@ -36,7 +36,44 @@ int main() {
         GLuint texture=0,fbo=0;
         {sideshow::fluid_gl::Target t(8,8,GL_RGBA16F,GL_RGBA,false);texture=t.texture;fbo=t.fbo;}
         require(!glIsTexture(texture)&&!glIsFramebuffer(fbo),"Target handles leaked");
+        // A previous backend may leave any active unit, texture and sampler bound.
+        GLuint priorTextures[2]={},inheritedSampler=0;
+        glGenTextures(2,priorTextures);glGenSamplers(1,&inheritedSampler);
+        glSamplerParameteri(inheritedSampler,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,priorTextures[0]);
+        glBindSampler(0,inheritedSampler);
+        glActiveTexture(GL_TEXTURE7);glBindTexture(GL_TEXTURE_2D,priorTextures[1]);
+        const auto beforeProbe=fluid_gl_tracking::live;
+        fluid_gl_tracking::failCompileAfter=0;
+        bool probeFailed=false;
+        try{sideshow::fluid_gl::probeCapabilities();}catch(const std::exception&){probeFailed=true;}
+        require(probeFailed,"Injected probe shader failure was not observed");
+        require(fluid_gl_tracking::live==beforeProbe,"Failed probe leaked GL handles");
+        GLint failedActive=0,failedBinding=0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE,&failedActive);glGetIntegerv(GL_TEXTURE_BINDING_2D,&failedBinding);
+        require(failedActive==GL_TEXTURE7&&failedBinding==static_cast<GLint>(priorTextures[1]),"Throwing probe corrupted retained texture state");
         auto caps=sideshow::fluid_gl::probeCapabilities();
+        GLint active=0,binding=0,sampler=0;
+        glGetIntegerv(GL_ACTIVE_TEXTURE,&active);
+        require(active==GL_TEXTURE7,"Probe did not restore active texture unit");
+        glGetIntegerv(GL_TEXTURE_BINDING_2D,&binding);
+        require(binding==static_cast<GLint>(priorTextures[1]),"Probe changed entry-unit texture");
+        glActiveTexture(GL_TEXTURE0);glGetIntegerv(GL_TEXTURE_BINDING_2D,&binding);
+        glGetIntegerv(GL_SAMPLER_BINDING,&sampler);
+        require(binding==static_cast<GLint>(priorTextures[0]),"Probe changed unit-zero texture");
+        require(sampler==static_cast<GLint>(inheritedSampler),"Probe changed unit-zero sampler");
+        // Fail after shaders, VAO and noise target have been allocated.
+        glActiveTexture(GL_TEXTURE7);
+        const auto beforeCandidate=fluid_gl_tracking::live;
+        bool candidateFailed=false;
+        try{sideshow::FluidRenderer failed(2147483647,1,config);}catch(const std::exception&){candidateFailed=true;}
+        require(candidateFailed,"Oversized candidate initialized");
+        require(fluid_gl_tracking::live==beforeCandidate,"Failed candidate leaked GL handles");
+        glGetIntegerv(GL_ACTIVE_TEXTURE,&active);glGetIntegerv(GL_TEXTURE_BINDING_2D,&binding);
+        require(active==GL_TEXTURE7&&binding==static_cast<GLint>(priorTextures[1]),"Failed candidate changed retained renderer bindings");
+        glActiveTexture(GL_TEXTURE0);
+        glDeleteTextures(2,priorTextures);
+        for(int unit=0;unit<4;++unit)glBindSampler(unit,inheritedSampler);
         std::cout << "float filtering: " << caps.linear << "\n";
         caps.scalar=GL_RGBA16F;caps.vector=GL_RGBA16F;caps.linear=false;
         for(int i=0;i<3;++i) {
@@ -44,6 +81,9 @@ int main() {
             conservative.render(.016f,*sideshow::findFluidPreset("lava"),{{.5f,.5f,100,100,{1,0,0}}});
             require(glGetError()==GL_NO_ERROR,"Manual-filter/RGBA fallback failed");
         }
+        bool zeroSizeFailed=false;
+        try{sideshow::FluidRenderer zeroSize(0,0,config);}catch(const std::exception&){zeroSizeFailed=true;}
+        require(zeroSizeFailed,"Zero-size startup created an unusable renderer");
         sideshow::FluidRenderer renderer(320,180,config);
         sideshow::FluidMotion motion(7);
         for(const auto& p:sideshow::fluidPresets()) {
@@ -67,6 +107,8 @@ int main() {
         try{renderer.resize(2147483647,1);}catch(const std::exception&){resizeFailed=true;}
         require(resizeFailed,"Oversized target was accepted");
         renderer.render(.016f,*sideshow::findFluidPreset("lava"),{});
+        for(int unit=0;unit<4;++unit)glBindSampler(unit,0);
+        glDeleteSamplers(1,&inheritedSampler);
         renderer.resize(0,0); renderer.resize(180,320); renderer.resize(320,180);
         renderer.render(100,*sideshow::findFluidPreset("lava"),{});
         require(glGetError()==GL_NO_ERROR,"GL error after resizing");
@@ -74,7 +116,10 @@ int main() {
         app.presets.root="/nonexistent";
         bool reject=false;
         sideshow::VisualController controller(app,320,180,[&](sideshow::VisualMode m,const sideshow::BackendInit& i)->std::unique_ptr<sideshow::VisualBackend>{
-            if(reject)throw std::runtime_error("injected allocation failure");
+            if(reject) {
+                auto invalid=i;invalid.width=2147483647;invalid.height=1;
+                return std::make_unique<sideshow::FluidBackend>(invalid);
+            }
             if(m==sideshow::VisualMode::Fluid)return std::make_unique<sideshow::FluidBackend>(i);
             return std::make_unique<sideshow::MilkdropBackend>(i);
         });
@@ -93,7 +138,11 @@ int main() {
             }
         }
         require(controller.statusPreset()=="fluid/lava","Preset not restored on return");
-        reject=true;require(!controller.setMode(sideshow::VisualMode::Milkdrop),"Failed candidate accepted");
+        require(controller.setMode(sideshow::VisualMode::Milkdrop),"Could not prepare retained backend");
+        reject=true;require(!controller.setMode(sideshow::VisualMode::Fluid),"Partially allocated candidate accepted");
+        require(controller.mode()==sideshow::VisualMode::Milkdrop,"Failed fluid candidate replaced retained backend");
+        controller.render(.016f);require(glGetError()==GL_NO_ERROR,"Retained renderer failed after partial candidate allocation");
+        reject=false;require(controller.setMode(sideshow::VisualMode::Fluid),"Fluid did not initialize after failure");
         controller.render(.016f);output.apply(1,320,180);
         require(controller.statusPreset()=="fluid/lava","Failed switch changed active backend");
         std::vector<unsigned char> lit(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,lit.data());

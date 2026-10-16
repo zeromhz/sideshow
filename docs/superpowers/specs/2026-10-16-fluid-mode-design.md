@@ -1,7 +1,7 @@
 # Selectable fluid visualization mode
 
 Date: 2026-10-16
-Status: Proposed for user review; implementation has not started.
+Status: Approved and implemented on `codex/selectable-fluid-mode`; Pi hardware acceptance remains pending.
 
 ## Intent and confirmed scope
 

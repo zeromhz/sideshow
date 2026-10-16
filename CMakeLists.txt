@@ -62,7 +62,11 @@ if(SIDESHOW_BUILD_PLAYER)
     target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_backends PUBLIC sideshow_fluid libprojectM::projectM libprojectM::playlist)
     if(SIDESHOW_BUILD_GL_TESTS)
-        add_executable(sideshow_gl_tests tests/test_visual_gl.cpp)
+        add_executable(sideshow_gl_tests tests/test_visual_gl.cpp src/fluid_gl.cpp)
+        # Link the instrumented GL ownership boundary in this executable only;
+        # the archive's ordinary fluid_gl object is not extracted by the linker.
+        target_compile_options(sideshow_gl_tests PRIVATE
+            -include ${CMAKE_CURRENT_SOURCE_DIR}/tests/support/fluid_gl_tracking.h)
         target_compile_definitions(sideshow_gl_tests PRIVATE ${SIDESHOW_GL_DEFS})
         target_link_libraries(sideshow_gl_tests PRIVATE sideshow_backends SDL2::SDL2 ${SIDESHOW_GL_LIBS})
     endif()

@@ -107,3 +107,7 @@ python3 -m unittest discover -s tools
 GL tests are deliberately separate from default CTest and require a working SDL GL context. A missing context is a failed prerequisite, never a passing GPU test. `SIDESHOW_BUILD_GL_TESTS` requires `SIDESHOW_BUILD_PLAYER=ON`.
 
 Validated on the development Mac with desktop GL: shader compilation, all eleven presets, wider float target/manual advection fallback, repeated real backend switches, blackout, resizing, and failed candidate retention. Core tests also run under ASan/UBSan. Raspberry Pi 5 GLES, microphone hardware response, sustained performance/thermals, and systemd recovery remain unverified; use the README hardware checklist before deploying to a show.
+
+On 2026-10-16 the development Mac (arm64, OpenGL 4.1 Metal 90.5) reported 59.1–60.1 FPS after warm-up at a 1280×720 drawable with default simulation/dye quality. This short desktop sample is not a Pi benchmark or sustained thermal test. Live OSC switching restored `fluid/lava` and the previous MilkDrop preset. A projectM texture warning reproduced with the unchanged baseline player as well.
+
+The GL test executable uses test-only wrappers around real GL allocation/deletion calls to verify resource cleanup after injected shader failure and failed candidate initialization. Production builds do not include those wrappers.

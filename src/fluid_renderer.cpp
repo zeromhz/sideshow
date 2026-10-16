@@ -66,6 +66,7 @@ struct FluidRenderer::Impl {
     std::unique_ptr<Fields> fields;
     Impl(int w,int h,const Config::Fluid& c,fluid_gl::Capabilities cap)
         :config(c),caps(cap),advection(fluid_shader::vertex,fluid_shader::advection,cap.linear?"":"#define MANUAL_FILTERING\n") {
+        if(w<=0||h<=0)throw std::runtime_error("Fluid requires a positive initial drawable size");
         if(c.simulationResolution<32||c.simulationResolution>256||c.dyeResolution<128||c.dyeResolution>1024)
             throw std::runtime_error("Fluid quality outside supported bounds");
         for(size_t i=0;i<displays.size();++i) {
@@ -148,9 +149,13 @@ struct FluidRenderer::Impl {
     }
 };
 FluidRenderer::FluidRenderer(int w,int h,const Config::Fluid& c)
-    :FluidRenderer(w,h,c,[]{fluid_gl::resetState();return fluid_gl::probeCapabilities();}()){}
+    :FluidRenderer(w,h,c,fluid_gl::probeCapabilities()){}
 FluidRenderer::FluidRenderer(int w,int h,const Config::Fluid& c,fluid_gl::Capabilities caps)
-    :impl_(std::make_unique<Impl>(w,h,c,caps)){}
+{
+    fluid_gl::StateGuard restore;
+    fluid_gl::resetState();
+    impl_=std::make_unique<Impl>(w,h,c,caps);
+}
 FluidRenderer::~FluidRenderer()=default;
 void FluidRenderer::resize(int w,int h){impl_->resize(w,h);}
 void FluidRenderer::render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& s){impl_->render(dt,p,s);}

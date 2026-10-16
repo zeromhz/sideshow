@@ -1,8 +1,23 @@
 #pragma once
 #include "gl.h"
 #include <string>
+#include <array>
 #include <utility>
 namespace sideshow::fluid_gl {
+// Initialization must not disturb a retained backend, even when construction throws.
+class StateGuard {
+public:
+    StateGuard();
+    ~StateGuard();
+    StateGuard(const StateGuard&)=delete;
+    StateGuard& operator=(const StateGuard&)=delete;
+private:
+    GLint active_=0,program_=0,vao_=0,drawFbo_=0,readFbo_=0;
+    std::array<GLint,4> textures_{},samplers_{},viewport_{};
+    std::array<GLboolean,4> colorMask_{};
+    std::array<GLboolean,7> enabled_{};
+    GLint srcRgb_=0,dstRgb_=0,srcAlpha_=0,dstAlpha_=0,equationRgb_=0,equationAlpha_=0;
+};
 class Program {
 public:
     Program(const char* vertex,const char* fragment,const std::string& defines="");
