@@ -1,0 +1,70 @@
+--- a/VVGL/include/GLContext.hpp
++++ b/VVGL/include/GLContext.hpp
+@@ -21,10 +21,10 @@
+ 		//#import <GLKit/GLKit.h>
+ 	//#endif
+ #elif defined(VVGL_SDK_RPI)
+-	#include "bcm_host.h"
++	
+ 	//#include <GLES/gl.h>
+ 	//#include <GLES/glext.h>
+-	#include <GLES2/gl2.h>
++	#include <GLES3/gl3.h>
+ 	#include <GLES2/gl2ext.h>
+ 	#include <EGL/egl.h>
+ 	#include <EGL/eglext.h>
+--- a/VVGL/include/VVGL_Defines.hpp
++++ b/VVGL/include/VVGL_Defines.hpp
+@@ -50,7 +50,7 @@
+ #elif defined(VVGL_SDK_IOS)
+ 	#define VVGL_TARGETENV_GLES3
+ #elif defined(VVGL_SDK_RPI)
+-	#define VVGL_TARGETENV_GLES
++	#define VVGL_TARGETENV_GLES3
+ #elif defined(VVGL_SDK_GLFW)
+ 	#define VVGL_TARGETENV_GL2
+ 	#define VVGL_TARGETENV_GL3PLUS
+--- a/VVGL/include/GLBuffer_Enums_RPI.h
++++ b/VVGL/include/GLBuffer_Enums_RPI.h
+@@ -3,12 +3,17 @@
+ 	Target_None,
+ 	Target_RB,
+ 	Target_2D = GL_TEXTURE_2D,
++ Target_Cube = GL_TEXTURE_CUBE_MAP,
++ Target_PBOPack = GL_PIXEL_PACK_BUFFER,
++ Target_PBOUnpack = GL_PIXEL_UNPACK_BUFFER,
+ };
+ enum InternalFormat	{
+ 	IF_None = 0,
+ 	IF_RGB = GL_RGB,
+ 	IF_RGBA = GL_RGBA,
+-	IF_RGBA16 = GL_RGBA16,
++	IF_RGBA16 = GL_RGBA16_EXT,
++ IF_R = GL_RED,
++ IF_RGBA32F = GL_RGBA32F,
+ 	IF_Depth16 = GL_DEPTH_COMPONENT16,
+ };
+ enum PixelFormat	{
+--- a/VVGL/src/GLBufferPool.cpp
++++ b/VVGL/src/GLBufferPool.cpp
+@@ -1396,16 +1396,10 @@
+ 	
+ 	desc.type = GLBuffer::Type_Tex;
+ 	desc.target = GLBuffer::Target_2D;
+-#if !defined(VVGL_SDK_RPI)
+-	desc.internalFormat = GLBuffer::IF_RGBA32F;
+-	desc.pixelFormat = GLBuffer::PF_RGBA;
+-	desc.pixelType = GLBuffer::PT_Float;
+-#else
+-	desc.internalFormat = GLBuffer::IF_RGBA;
+-	desc.pixelFormat = GLBuffer::PF_RGBA;
+-	//desc.pixelType = GLBuffer::PT_HalfFloat;
+-	desc.pixelType = GLBuffer::PT_UByte;
+-#endif
++desc.internalFormat = GLBuffer::IF_RGBA32F;
++    desc.pixelFormat = GLBuffer::PF_RGBA;
++    desc.pixelType = GLBuffer::PT_Float;
++
+ 	//desc.pixelFormat = GLBuffer::PF_RGBA;
+ 	//desc.pixelType = GLBuffer::PT_Float;
+ 	desc.cpuBackingType = GLBuffer::Backing_None;
