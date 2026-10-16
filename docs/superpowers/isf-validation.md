@@ -18,8 +18,8 @@ Validated on an Apple Silicon Mac running macOS 26.7.1, using SDL desktop OpenGL
 
 The live test requested a 1280×720 window; Retina produced a **2560×1440 drawable**,
 with ISF capped at **1280×720** internally. Plasma pong samples after successive
-switch cycles were 59.41, 58.88, 58.47 and 58.76 FPS. Process RSS samples were
-112784, 116512, 118608 and 120416 KiB. This short run shows successful repeated
+switch cycles were 58.82, 58.65, 58.65 and 58.71 FPS. Process RSS samples were
+112544, 116912, 119184 and 120800 KiB. This short run shows successful repeated
 switching, not a proven long-term memory plateau. Texture-budget tests verify
 that runtime destruction releases all tracked reservations. Driver allocations
 and caches are outside that accounting.
@@ -54,3 +54,34 @@ float framebuffer capability, all bundled shaders, real mic loss/reconnect,
 blackout/mode switching, compile latency, sustained FPS/thermals and long-running
 RSS. GPU shader compilation cannot be preempted; use trusted shaders. See
 [operator limits](../isf.md) for exact file, image and texture resource ceilings.
+
+## Independent review and fixes
+
+One independent whole-branch review found two important issues. Both received
+failing regressions and fixes, followed by the full 113-case suite, 13 Python
+cases, all five GL suites, runtime/backend ASan+UBSan, adapter GLES syntax checks
+and the four-cycle live OSC test. No minor findings were deferred.
+
+- Resize/parameter admission now allocates the complete required frame storage,
+  including ping-pong, old output overlap and frame-zero redraw peaks, before
+  committing. Unused pool storage can be reclaimed to admit a valid update.
+  Staged state retains a rollback snapshot until rendering succeeds; output
+  dimensions track the last successful image. Recoverable frame rejection keeps
+  the previous parameters, history and picture without advancing its clock.
+  Tests cover the 20,000-byte resize reproducer, production-limit FLOAT target
+  growth, rejected frame-zero feedback redraw and delayed aspect-ratio commit.
+- An invalid newest preset/folder leaves a rejected control target. Later
+  parameters/events cannot mutate the old shader; a successful selection restores
+  control. Regressions cover both parameters and events for presets and folders.
+
+Additional memory probes before these final fixes: 12 mixed-mode cycles rose from
+112272 to 134512 KiB RSS; 20 shader-only cycles rose from 98288 to 102112 KiB.
+These are process-level observations, not an attributed ISF leak or a plateau.
+Long-running memory attribution remains an acceptance limitation.
+
+Review scope decisions: Pi execution remains unverified without hardware (possible
+platform-specific failures); memory stability remains unproven rather than inferred
+from texture accounting (possible retained CPU/driver allocations); vendored stb
+bulk was excluded from the independent audit while its decoding boundary was
+reviewed (upstream implementation defects could remain). No claim of full third-party
+source audit or production hardware acceptance is made.

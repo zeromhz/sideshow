@@ -83,5 +83,18 @@ void main(){gl_FragColor=vec4(IMG_PIXEL(fft,vec2(32.5,0.5)).r,0,0,1);})");
  {fluid_gl::Program departing("void main(){gl_Position=vec4(0);}","out vec4 c;void main(){c=vec4(1);}");departing.use();}
  r.present(320,180);r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(160,90)[0]==255,"departing mode program broke ISF");
  }
+ {
+ IsfBudget limited(20000);auto s=source("/*{}*/void main(){gl_FragColor=vec4(1,0,0,1);}");IsfRuntime r(context,limited,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);std::string why;
+ requireIsf(!r.update(p,48,48,why),"resize admitted without complete frame budget");r.present(320,180);requireIsf(pixel(160,90)[0]==255,"rejected resize lost picture");r.draw(p,audio,.1,.1,1);
+ }
+ {
+ auto s=source(R"(/*{"INPUTS":[{"NAME":"size","TYPE":"float","DEFAULT":2048}],"PASSES":[{"TARGET":"history","WIDTH":"$size","HEIGHT":1024,"FLOAT":true,"PERSISTENT":true},{}]}*/void main(){gl_FragColor=vec4(1,0,0,1);})");IsfRuntime r(context,budget,s,32,32);IsfParameters p(s->document.inputs);p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);auto changed=p;std::string why;changed.set({"size",{2500.0f}},why);bool accepted=r.update(changed,32,32,why);r.draw(accepted?changed:p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(160,90)[0]==255,"rejected growth lost running picture");
+ }
+ {
+ IsfBudget limited(16384);auto s=source(R"(/*{"INPUTS":[{"NAME":"reset","TYPE":"event"}],"PASSES":[{"TARGET":"history","PERSISTENT":true},{}]}*/void main(){if(PASSINDEX==0)gl_FragColor=vec4(reset?0.7:IMG_THIS_PIXEL(history).r+0.1,0,0,1);else gl_FragColor=IMG_THIS_PIXEL(history);})");IsfRuntime r(context,limited,s,32,32);IsfParameters p(s->document.inputs);p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);auto reset=p;std::string why;reset.trigger("reset",why);bool rejected=false;try{r.draw(reset,audio,0,0,0);}catch(const IsfFrameRejected&){rejected=true;}requireIsf(rejected,"frame-zero redraw peak was not checked");r.present(320,180);requireIsf(pixel(160,90)[0]>=25&&pixel(160,90)[0]<=27,"rejected redraw changed picture");r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(160,90)[0]>=50&&pixel(160,90)[0]<=53,"rejected redraw lost feedback history");
+ }
+ {
+ IsfBudget limited(30000);auto s=source("/*{}*/void main(){gl_FragColor=vec4(1,0,0,1);}");IsfRuntime r(context,limited,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);std::string why;requireIsf(r.update(p,64,32,why),"valid resize rejected");r.present(320,180);requireIsf(pixel(20,90)[0]==0&&pixel(160,90)[0]==255,"staged resize changed retained presentation");r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(20,90)[0]==255,"successful resize did not commit aspect ratio");
+ }
  std::cout<<"ISF runtime checks passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

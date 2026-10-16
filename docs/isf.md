@@ -47,12 +47,13 @@ Use `/sideshow/<panel-id>/...` or `/sideshow/all/...` on the configured UDP port
 | `isf_param` | string name + 1, 2 or 4 numbers | Set scalar, point or RGBA input atomically |
 | `isf_event` | string name | Latch event through one successfully presented frame |
 
-Numbers must be finite OSC int32 or float32. Booleans accept 0 or 1, integer inputs
-require integral values, and menu values must appear in `VALUES`. Continuous inputs
+Numbers must be finite OSC int32 or float32. Booleans require OSC int32 0 or 1, integer inputs
+require OSC int32 values, and menu values must appear in `VALUES`. Continuous inputs
 clamp only to declared bounds; undeclared bounds are not invented. Wrong names,
 types or arity leave values unchanged. CLI `2` sends an integer and `2.0` a float.
 Events apply to every pass of their frame. Controls during preparation follow the
-newest selection, with at most 64 queued; superseding it discards its controls.
+newest selection, with at most 64 queued; superseding it discards its controls. After a rejected selection, parameters and
+events remain rejected until a valid shader selection succeeds.
 Outside active/pending ISF mode they are ignored with a warning.
 
 Declared defaults reset on each load. Missing defaults follow the pinned runtime:
