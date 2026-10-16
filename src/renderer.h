@@ -2,7 +2,6 @@
 
 #include <projectM-4/projectM.h>
 
-#include "brightness_pass.h"
 #include "config.h"
 
 namespace sideshow {
@@ -19,7 +18,6 @@ public:
 
     void resize(int width, int height);
     void addPcm(const float* interleavedStereo, unsigned int frames);
-    void render(float brightness);
     void renderFrame();
 
     void setBeatSensitivity(float value);
@@ -28,7 +26,6 @@ public:
 
 private:
     projectm_handle projectm_ = nullptr;
-    BrightnessPass brightness_;
     int width_;
     int height_;
 };

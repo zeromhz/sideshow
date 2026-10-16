@@ -50,11 +50,6 @@ void Renderer::renderFrame() {
     projectm_opengl_render_frame(projectm_);
 }
 
-void Renderer::render(float brightness) {
-    renderFrame();
-    brightness_.apply(brightness, width_, height_);
-}
-
 void Renderer::setBeatSensitivity(float value) { projectm_set_beat_sensitivity(projectm_, value); }
 
 void Renderer::setHardCutEnabled(bool on) { projectm_set_hard_cut_enabled(projectm_, on); }

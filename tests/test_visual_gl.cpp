@@ -1,6 +1,10 @@
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include "fluid_renderer.h"
+#include "fluid_backend.h"
+#include "milkdrop_backend.h"
+#include "visual_controller.h"
+#include "brightness_pass.h"
 #include "fluid_motion.h"
 #include "gl.h"
 #include "fluid_shaders.h"
@@ -66,6 +70,35 @@ int main() {
         renderer.resize(0,0); renderer.resize(180,320); renderer.resize(320,180);
         renderer.render(100,*sideshow::findFluidPreset("lava"),{});
         require(glGetError()==GL_NO_ERROR,"GL error after resizing");
+        sideshow::Config app;app.visuals.mode=sideshow::VisualMode::Fluid;app.fluid=config;
+        app.presets.root="/nonexistent";
+        bool reject=false;
+        sideshow::VisualController controller(app,320,180,[&](sideshow::VisualMode m,const sideshow::BackendInit& i)->std::unique_ptr<sideshow::VisualBackend>{
+            if(reject)throw std::runtime_error("injected allocation failure");
+            if(m==sideshow::VisualMode::Fluid)return std::make_unique<sideshow::FluidBackend>(i);
+            return std::make_unique<sideshow::MilkdropBackend>(i);
+        });
+        sideshow::BrightnessPass output;
+        controller.apply(sideshow::cmd::Preset{"lava"});
+        controller.apply(sideshow::cmd::Lock{true});
+        controller.apply(sideshow::cmd::Playlist{"missing"});
+        require(controller.statusPreset()=="fluid/lava","Fluid playlist rejection changed preset");
+        for(int i=0;i<3;++i) {
+            for(auto mode:{sideshow::VisualMode::Milkdrop,sideshow::VisualMode::Fluid}) {
+                require(controller.setMode(mode),"Mode switch failed");
+                controller.render(.016f);output.apply(0,320,180);
+                std::vector<unsigned char> black(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,black.data());
+                for(size_t j=0;j<black.size();j+=4)require(black[j]==0&&black[j+1]==0&&black[j+2]==0,"Blackout flashed during mode switch");
+                require(glGetError()==GL_NO_ERROR,"GL error during mode switch");
+            }
+        }
+        require(controller.statusPreset()=="fluid/lava","Preset not restored on return");
+        reject=true;require(!controller.setMode(sideshow::VisualMode::Milkdrop),"Failed candidate accepted");
+        controller.render(.016f);output.apply(1,320,180);
+        require(controller.statusPreset()=="fluid/lava","Failed switch changed active backend");
+        std::vector<unsigned char> lit(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,lit.data());
+        size_t sum=0;for(size_t i=0;i<lit.size();i+=4)sum+=lit[i]+lit[i+1]+lit[i+2];
+        require(sum>1000,"Fluid did not return after blackout");
     } catch(const std::exception& e) {std::cerr << e.what() << '\n';result=1;}
     SDL_GL_DeleteContext(context);SDL_DestroyWindow(window);SDL_Quit();return result;
 }

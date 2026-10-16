@@ -57,25 +57,25 @@ if(SIDESHOW_BUILD_PLAYER)
     target_compile_definitions(sideshow_fluid PUBLIC ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
+    add_library(sideshow_backends STATIC src/fluid_backend.cpp src/milkdrop_backend.cpp
+        src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp)
+    target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
+    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid libprojectM::projectM libprojectM::playlist)
     if(SIDESHOW_BUILD_GL_TESTS)
         add_executable(sideshow_gl_tests tests/test_visual_gl.cpp)
         target_compile_definitions(sideshow_gl_tests PRIVATE ${SIDESHOW_GL_DEFS})
-        target_link_libraries(sideshow_gl_tests PRIVATE sideshow_fluid SDL2::SDL2 ${SIDESHOW_GL_LIBS})
+        target_link_libraries(sideshow_gl_tests PRIVATE sideshow_backends SDL2::SDL2 ${SIDESHOW_GL_LIBS})
     endif()
     add_executable(sideshow-player
         src/main.cpp
         src/display.cpp
-        src/brightness_pass.cpp
-        src/milkdrop_backend.cpp
-        src/renderer.cpp
         src/audio_capture.cpp
-        src/preset_manager.cpp
         src/osc_server.cpp
     )
     target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow-player PRIVATE
-        sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
+        sideshow_backends SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
         libprojectM::projectM libprojectM::playlist PkgConfig::LIBLO)
 endif()
 

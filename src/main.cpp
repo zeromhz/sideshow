@@ -22,6 +22,10 @@
 #include "preset_catalog.h"
 #include "preset_manager.h"
 #include "renderer.h"
+#include "visual_controller.h"
+#include "milkdrop_backend.h"
+#include "fluid_backend.h"
+#include "brightness_pass.h"
 
 using namespace sideshow;
 
@@ -41,41 +45,6 @@ std::string configPathFromArgs(int argc, char** argv) {
         if (std::strcmp(argv[i], "--config") == 0) return argv[i + 1];
     }
     return kDefaultConfigPath;
-}
-
-template <class... Ts>
-struct Overloaded : Ts... {
-    using Ts::operator()...;
-};
-template <class... Ts>
-Overloaded(Ts...) -> Overloaded<Ts...>;
-
-void applyCommand(const Command& command, PresetManager& presets, Renderer& renderer,
-                  OutputLevel& output) {
-    std::visit(
-        Overloaded{
-            [&](const cmd::Mode&) { logWarn("fluid mode integration pending"); },
-            [&](const cmd::Next&) { presets.next(); },
-            [&](const cmd::Prev&) { presets.prev(); },
-            [&](const cmd::Random&) { presets.random(); },
-            [&](const cmd::Lock& c) { presets.setLocked(c.on); },
-            [&](const cmd::Playlist& c) {
-                if (!presets.switchPlaylist(c.name)) {
-                    logWarn("OSC: unknown or empty playlist '" + c.name + "'");
-                }
-            },
-            [&](const cmd::Preset& c) {
-                if (!presets.loadPreset(c.name)) {
-                    logWarn("OSC: preset not found or broken '" + c.name + "'");
-                }
-            },
-            [&](const cmd::Blackout& c) { output.setBlackout(c.on); },
-            [&](const cmd::Master& c) { output.setTarget(c.value); },
-            [&](const cmd::Duration& c) { renderer.setPresetDuration(c.seconds); },
-            [&](const cmd::BeatSensitivity& c) { renderer.setBeatSensitivity(c.value); },
-            [&](const cmd::HardCut& c) { renderer.setHardCutEnabled(c.on); },
-        },
-        command);
 }
 
 }  // namespace
@@ -104,11 +73,12 @@ int main(int argc, char** argv) {
     try {
         // Declaration order matters: later objects are destroyed first.
         Display display(config.display);
-        Renderer renderer(display.drawableWidth(), display.drawableHeight(), config.display.fps,
-                          config.presets);
-        PresetCatalog catalog(config.presets.root);
-        PresetManager presets(renderer.handle(), catalog, config.presets.shuffle);
-        presets.start(config.presets.playlist);
+        VisualController visuals(config,display.drawableWidth(),display.drawableHeight(),
+            [](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+                if(mode==VisualMode::Fluid)return std::make_unique<FluidBackend>(init);
+                return std::make_unique<MilkdropBackend>(init);
+            });
+        BrightnessPass brightness;
 
         OutputLevel output(config.output.masterDefault, config.output.masterCurve,
                            config.output.masterSmoothingMs);
@@ -136,14 +106,16 @@ int main(int argc, char** argv) {
                     if (audio) audio->handleDeviceRemoved(event.adevice.which);
                 } else if (event.type == SDL_WINDOWEVENT &&
                            event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                    renderer.resize(display.drawableWidth(), display.drawableHeight());
+                    visuals.resize(display.drawableWidth(), display.drawableHeight());
                 }
             }
 
             // Skip a failed preset first, so it can't override or double an OSC command.
-            presets.tick();
+            visuals.maintenance();
             commands.processFrame([&](const Command& command) {
-                applyCommand(command, presets, renderer, output);
+                if(const auto* c=std::get_if<cmd::Master>(&command)) output.setTarget(c->value);
+                else if(const auto* c=std::get_if<cmd::Blackout>(&command)) output.setBlackout(c->on);
+                else visuals.apply(command);
             });
 
             const Uint32 now = SDL_GetTicks();
@@ -151,17 +123,18 @@ int main(int argc, char** argv) {
             const float dtSeconds = static_cast<float>(now - lastTicks) / 1000.0f;
             audioFeed.update(ring, audio && audio->isOpen(), dtSeconds,
                              [&](const float* pcm, size_t frames) {
-                                 renderer.addPcm(pcm, static_cast<unsigned int>(frames));
+                                 visuals.addPcm(pcm, frames);
                              });
 
             output.update(dtSeconds);
             lastTicks = now;
-            renderer.render(output.brightness());
+            visuals.render(dtSeconds);
+            brightness.apply(output.brightness(),display.drawableWidth(),display.drawableHeight());
             display.swap();
 
             ++framesInWindow;
             if (now - fpsWindowStart >= 1000) {
-                status.set(presets.currentPreset(),
+                status.set(visuals.statusPreset(),
                            framesInWindow * 1000.0f / static_cast<float>(now - fpsWindowStart));
                 fpsWindowStart = now;
                 framesInWindow = 0;
