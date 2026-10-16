@@ -42,6 +42,12 @@ int main() {
         glBindBuffer(GL_PIXEL_UNPACK_BUFFER,0);glPixelStorei(GL_UNPACK_ROW_LENGTH,0);glPixelStorei(GL_UNPACK_SKIP_ROWS,0);glPixelStorei(GL_UNPACK_ALIGNMENT,4);
         glEnable(GL_SCISSOR_TEST);glScissor(0,0,1,1);glEnable(GL_DEPTH_TEST);glColorMask(false,false,false,false);
         presenter.render();require(pixel(0,90)[0]==0,"Missing letterbox");require(pixel(160,90)[0]>250,"Video invisible with inherited state");
+        const auto beforeFailure=fluid_gl_tracking::live;
+        video_gl_tracking::failNextUpload=true;
+        bool allocationFailed=false;try{presenter.upload(frame);}catch(...){allocationFailed=true;}
+        require(allocationFailed,"Injected upload failure not observed");
+        require(fluid_gl_tracking::live==beforeFailure,"Failed upload leaked a GL resource");
+        presenter.render();require(pixel(160,90)[0]>250,"Allocation failure replaced old picture");
         frame.stride=1;bool failed=false;try{presenter.upload(frame);}catch(...){failed=true;}
         require(failed,"Invalid stride accepted");presenter.render();require(pixel(160,90)[0]>250,"Failed upload lost old picture");
         frame.stride=8;frame.rgba={255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255};frame.rotationDegrees=90;
@@ -65,6 +71,13 @@ int main() {
         for(int i=0;i<50;++i) {video.maintenance();video.render(.01);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         require(video.selection().preset=="reordered.mp4","Bad clip replaced selection");
         require(pixel(160,90)==before,"Bad clip replaced picture");
+        const auto beforeCandidate=fluid_gl_tracking::live;
+        video_gl_tracking::failNextUpload=true;video.selectPreset("bars-audio.avi");
+        for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        require(!video_gl_tracking::failNextUpload,"Candidate upload did not run");
+        require(fluid_gl_tracking::live==beforeCandidate,"Candidate failure leaked handles");
+        video.render(1);require(pixel(160,90)==before,"Candidate failure replaced picture");
+        require(video.selection().preset=="reordered.mp4","Candidate failure replaced selection");
         video.restart();for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         video.render(1);require(pixel(160,90)==before,"Paused restart changed first frame");
         require(glGetError()==GL_NO_ERROR,"GL error");
