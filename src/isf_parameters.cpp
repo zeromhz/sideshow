@@ -3,6 +3,12 @@
 #include <cmath>
 #include <stdexcept>
 namespace sideshow {
+bool IsfParameters::apply(const IsfControlCommand& command,std::string& error){
+ return std::visit([&](const auto& value){
+  if constexpr(std::is_same_v<std::decay_t<decltype(value)>,cmd::IsfParam>)return set(value,error);
+  else return trigger(value.name,error);
+ },command);
+}
 void IsfParameters::initializeDefaults(const std::map<std::string,IsfValue>& defaults){
  std::map<std::string,IsfValue> next;
  for(const auto& i:inputs_){if(i.kind==IsfInputKind::Event||i.kind==IsfInputKind::Audio||i.kind==IsfInputKind::AudioFFT)continue;

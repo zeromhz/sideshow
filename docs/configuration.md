@@ -96,7 +96,7 @@ configuration, FFmpeg dependencies, architecture limits and hardware validation.
 ## ISF settings
 
 Set `[visuals] mode = "isf"` for ISF startup. `[isf]` accepts `root` (default
-`/opt/sideshow/isf`), `preset` (default empty, otherwise exact relative `.fs` ID),
+`/opt/sideshow/isf`), `preset` (default `examples/plasma.fs`, otherwise exact relative `.fs` ID),
 `max_width` (1280) and `max_height` (720). Dimensions must be integers 1–4096;
 invalid values warn and retain defaults. Portrait swaps the caps. Development
 setup uses `deps/isf` and `examples/plasma.fs`. Restart after config or catalog

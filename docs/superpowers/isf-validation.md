@@ -3,11 +3,11 @@
 Validated on an Apple Silicon Mac running macOS 26.7.1, using SDL desktop OpenGL
 4.1 (Metal driver). These results are not Raspberry Pi performance measurements.
 
-- Full player build: successful. CTest: 113/113. Python CLI: 13/13.
+- Full player build: successful. CTest: 117/117. Python CLI: 13/13.
 - Real GL suites: Fluid, Video, ISF context, ISF runtime and ISF backend passed.
-- Core ASan/UBSan: 101/101. ISF runtime and backend ASan/UBSan passed with
+- Core ASan/UBSan: 105/105. ISF runtime and backend ASan/UBSan passed with
   `UBSAN_OPTIONS=halt_on_error=1`.
-- Fresh core-only configure/build/tests: 101/101; link lines contain core/Catch2
+- Fresh core-only configure/build/tests: 105/105; link lines contain core/Catch2
   only, with no GL/VVISF binary library.
 - Modern GLES header syntax checks: all 15 selected vendor translation units
   plus runtime, presenter and backend passed. This is not a Linux link/run test.
@@ -85,3 +85,26 @@ from texture accounting (possible retained CPU/driver allocations); vendored stb
 bulk was excluded from the independent audit while its decoding boundary was
 reviewed (upstream implementation defects could remain). No claim of full third-party
 source audit or production hardware acceptance is made.
+
+## Follow-up review fixes
+
+The requested follow-up review found that a named final FLOAT pass used RGBA8
+output, despite intermediate FLOAT passes working. A regression storing 2.0 in
+persistent final-pass history failed before the fix and passes afterward. Final
+output now uses that target's declared format and evaluated dimensions; admission
+uses its existing reserved destination. A second GL regression verifies its aspect
+ratio at presentation.
+
+Selection, fallback, generation checks, direct-folder navigation, duration and
+bounded control ownership now live in `IsfPlayback` within `sideshow_core`.
+Four pure tests cover retries, supersession, invalid newest targets, queue limits,
+ordered mixed parameters/events, atomic rejection, lock and automatic navigation.
+Immediate and queued commands both use `IsfParameters::apply`. The configuration
+reference now correctly documents `examples/plasma.fs` as the default.
+
+Post-fix validation: 117/117 CTest, 13/13 Python, 105/105 core-only and core
+ASan/UBSan, runtime/backend ASan/UBSan, all five native GL executables, current
+adapter GLES syntax checks and four-cycle live OSC all pass. The focused independent
+review found no blocking issues; its suggested mixed-control test was added.
+Live plasma samples were 59.00, 59.17, 58.76 and 59.52 FPS. Pi and long-running
+memory acceptance limitations above remain unchanged.

@@ -21,6 +21,7 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/isf_playback.cpp
     src/isf_budget.cpp
     src/isf_images.cpp
     src/isf_loader.cpp
@@ -122,6 +123,7 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_isf_playback.cpp
         tests/test_isf_budget.cpp
         tests/test_isf_images.cpp
         tests/test_isf_loader.cpp

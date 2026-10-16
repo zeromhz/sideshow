@@ -132,7 +132,9 @@ Actual FFmpeg 5.1 compilation and Pi/GLES hardware checks remain outstanding.
 Enable `SIDESHOW_BUILD_ISF_TESTS=ON` for the real-context, runtime and backend
 executables: `sideshow_isf_context_tests`, `sideshow_isf_runtime_tests` and
 `sideshow_isf_backend_tests`. These need a real display/GL context. Pure metadata,
-file, audio, parameter, loader and budget tests remain in `sideshow_tests`.
+file, audio, parameter, loader, playback and budget tests remain in `sideshow_tests`.
+Playback tests cover startup fallback, stale generations, rejected selections,
+queue capacity/order, shared validation, direct-folder navigation and timing without GL.
 VVISF is pinned in `cmake/IsfSource.cmake`; local patches are applied by
 `cmake/IsfDependencies.cmake`. Core-only builds consume its JSON header without
 linking the GL library. Linux uses modern EGL/GLES3, without Qt, GLFW or legacy

@@ -96,5 +96,11 @@ void main(){gl_FragColor=vec4(IMG_PIXEL(fft,vec2(32.5,0.5)).r,0,0,1);})");
  {
  IsfBudget limited(30000);auto s=source("/*{}*/void main(){gl_FragColor=vec4(1,0,0,1);}");IsfRuntime r(context,limited,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);std::string why;requireIsf(r.update(p,64,32,why),"valid resize rejected");r.present(320,180);requireIsf(pixel(20,90)[0]==0&&pixel(160,90)[0]==255,"staged resize changed retained presentation");r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(20,90)[0]==255,"successful resize did not commit aspect ratio");
  }
+ {
+ auto s=source(R"(/*{"PASSES":[{"TARGET":"history","PERSISTENT":true,"FLOAT":true}]}*/void main(){gl_FragColor=vec4(FRAMEINDEX==0?2.0:(IMG_THIS_PIXEL(history).r>1.5?1.0:0.0),0,0,1);})");IsfRuntime r(context,budget,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(160,90)[0]==255,"final named FLOAT history lost precision");
+ }
+ {
+ auto s=source(R"(/*{"PASSES":[{"TARGET":"history","PERSISTENT":true,"FLOAT":true,"WIDTH":16,"HEIGHT":32}]}*/void main(){gl_FragColor=vec4(1,0,0,1);})");IsfRuntime r(context,budget,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);r.present(320,180);requireIsf(pixel(100,90)[0]==0&&pixel(160,90)[0]==255,"final named target dimensions ignored");
+ }
  std::cout<<"ISF runtime checks passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

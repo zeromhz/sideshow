@@ -68,6 +68,16 @@ struct IsfRuntime::Impl {
   if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw std::runtime_error("ISF requested texture format is not renderable");const GLfloat black[]={0,0,0,0};glClearBufferfv(GL_COLOR,0,black);checkGl();return texture;
  }
  std::vector<VVISF::ISFPassTargetRef> targets(){auto result=doc->persistentPassTargets();auto temps=doc->tempPassTargets();result.insert(result.end(),temps.begin(),temps.end());return result;}
+ struct OutputSpec {int width,height;bool floating;};
+ OutputSpec outputSpec(int w,int h){
+  const auto& passes=source->document.passes;
+  if(passes.empty()||passes.back().target.empty())return {w,h,false};
+  const auto& name=passes.back().target;
+  auto target=doc->persistentPassTargetForKey(name);
+  if(!target)target=doc->tempPassTargetForKey(name);
+  if(!target)throw std::runtime_error("Missing final ISF target");
+  auto size=target->targetSize();return {int(size.width),int(size.height),target->floatFlag()};
+ }
  void values(const std::map<std::string,IsfValue>& v){for(const auto& [name,value]:v)scene->setValueForInputNamed(runtimeValue(value),name);}
  bool update(const IsfParameters& parameters,int w,int h,std::string& failure,bool resetHistory=false){
   if(w<=0||h<=0)return true;resetHistory=resetHistory&&!pendingCleared;Guard guard;auto before=snapshot();auto ts=targets();
@@ -85,8 +95,12 @@ struct IsfRuntime::Impl {
    // Unnamed intermediate passes also allocate full-size RGBA destinations.
    const auto& passes=source->document.passes;
    for(size_t n=0;n+1<passes.size();++n)if(passes[n].target.empty())warm.push_back(make(w,h,false));
-   warm.push_back(make(w,h,false));
-   if(w!=outputWidth||h!=outputHeight)warm.push_back(make(w,h,false));
+   // A named final pass uses its own destination (already warmed above).
+   // Unnamed output needs separate ping-pong storage across a resize.
+   if(passes.empty()||passes.back().target.empty()){
+    warm.push_back(make(w,h,false));
+    if(w!=outputWidth||h!=outputHeight)warm.push_back(make(w,h,false));
+   }
    if(!pending)pending=before;
    for(size_t n=0;n<ts.size();++n)if(replacement[n])ts[n]->setBuffer(replacement[n]);
    pendingCleared=pendingCleared||resetHistory;
@@ -108,7 +122,7 @@ void IsfRuntime::draw(const IsfParameters& p,const IsfAudio& a,double time,doubl
    if(input.kind!=IsfInputKind::Audio&&input.kind!=IsfInputKind::AudioFFT)continue;auto samples=input.kind==IsfInputKind::Audio?a.waveform(input.audioWidth):a.spectrum(input.audioWidth);std::vector<float> rgba(samples.samples.size()*4);for(size_t i=0;i<samples.samples.size();++i){rgba[4*i]=rgba[4*i+1]=rgba[4*i+2]=samples.samples[i];rgba[4*i+3]=1;}
    auto texture=r.audio.at(input.name);glBindTexture(GL_TEXTURE_2D,texture->name);glTexSubImage2D(GL_TEXTURE_2D,0,0,0,int(input.audioWidth),2,GL_RGBA,GL_FLOAT,rgba.data());r.scene->setBufferForAudioInputKey(texture,input.name);
   }
-  auto next=r.make(r.width,r.height,false);r.scene->hostTime=time;r.scene->hostDelta=delta;r.scene->hostIndex=frame;r.scene->renderToBuffer(next,VVGL::Size(r.width,r.height),time);checkGl();r.output=next;r.outputWidth=r.width;r.outputHeight=r.height;r.drawn=true;r.pending.reset();r.pendingCleared=false;
+  auto outputSpec=r.outputSpec(r.width,r.height);auto next=r.make(outputSpec.width,outputSpec.height,outputSpec.floating);r.scene->hostTime=time;r.scene->hostDelta=delta;r.scene->hostIndex=frame;r.scene->renderToBuffer(next,VVGL::Size(r.width,r.height),time);checkGl();r.output=next;r.outputWidth=outputSpec.width;r.outputHeight=outputSpec.height;r.drawn=true;r.pending.reset();r.pendingCleared=false;
  }catch(const VVISF::ISFErr& e){r.rollback();throw error(e);}catch(...){r.rollback();throw;}
  r.pool.value->housekeeping();
 }

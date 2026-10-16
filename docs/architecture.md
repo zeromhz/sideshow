@@ -138,7 +138,11 @@ context. `isf_runtime` owns a private VVISF scene/pool, pass textures and leases
 The SDL context outlives these objects and remains owned by the host. Loader
 shutdown joins before service/context destruction. No worker owns GL objects.
 
-`isf_backend` commits a candidate only after successful first-frame rendering.
+`isf_playback` owns selection, navigation, fallback attempts, request generations,
+duration and bounded control queues in `sideshow_core`, independently of GL.
+`isf_backend` dispatches its requests to the loader and commits a candidate only
+after successful first-frame rendering. Immediate and queued controls share
+`isf_parameters` validation.
 The controller routes selection/ISF controls to a pending mode and feeds fresh
 PCM to both active and pending backends. Capture stalls clear both histories.
 Generation checks discard superseded results and pending controls. Filesystem
