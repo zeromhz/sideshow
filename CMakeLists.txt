@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIDESHOW_BUILD_PLAYER "Build sideshow-player (needs projectM, SDL2, liblo)" OFF)
 option(SIDESHOW_BUILD_GL_TESTS "Build optional real-context visualization tests" OFF)
+option(SIDESHOW_BUILD_VIDEO_TESTS "Build FFmpeg decoder and worker tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
@@ -37,6 +38,15 @@ add_library(sideshow_core STATIC
 target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
+
+if(SIDESHOW_BUILD_PLAYER OR SIDESHOW_BUILD_VIDEO_TESTS)
+    find_package(PkgConfig REQUIRED)
+    find_package(Threads REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat>=59.27 libavcodec>=59.37 libavutil>=57.28 libswscale>=6.7)
+    add_library(sideshow_video STATIC src/video_decoder.cpp src/video_worker.cpp)
+    target_link_libraries(sideshow_video PUBLIC sideshow_core PkgConfig::FFMPEG Threads::Threads)
+    target_compile_options(sideshow_video PRIVATE -Wall -Wextra)
+endif()
 
 if(SIDESHOW_BUILD_PLAYER)
     find_package(SDL2 REQUIRED)
@@ -112,6 +122,13 @@ if(SIDESHOW_BUILD_TESTS)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
     include(Catch)
     catch_discover_tests(sideshow_tests)
+
+    if(SIDESHOW_BUILD_VIDEO_TESTS)
+        add_executable(sideshow_video_tests tests/test_video_decoder.cpp tests/test_video_worker.cpp)
+        target_compile_definitions(sideshow_video_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video")
+        target_link_libraries(sideshow_video_tests PRIVATE sideshow_video Catch2::Catch2WithMain)
+        catch_discover_tests(sideshow_video_tests)
+    endif()
 
     # Compile the real manager against a test-only projectM C API double, with no GPU SDK.
     add_executable(sideshow_preset_tests

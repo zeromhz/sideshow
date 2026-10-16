@@ -29,7 +29,8 @@ fi
 echo "==> Installing packages"
 apt-get update
 apt-get install -y build-essential cmake git pkg-config \
-    libsdl2-dev liblo-dev libgles-dev libegl-dev
+    libsdl2-dev liblo-dev libgles-dev libegl-dev \
+    libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
 
 echo "==> Building libprojectM"
 "$REPO_DIR/setup/build_projectm.sh" /usr/local --gles
@@ -44,6 +45,8 @@ install -D -m 0755 "$BUILD_DIR/sideshow-player" "$INSTALL_ROOT/bin/sideshow-play
 
 echo "==> Fetching presets and textures"
 "$REPO_DIR/setup/fetch_presets.sh" "$INSTALL_ROOT"
+
+install -d -m 0755 "$INSTALL_ROOT/videos"
 
 echo "==> Writing config"
 install -d /etc/sideshow

@@ -1,11 +1,14 @@
 #pragma once
 #include <optional>
+#include <memory>
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <string_view>
 namespace sideshow {
 struct VideoFrame {
+    // Keeps a worker buffer credit alive until presentation releases the frame.
+    std::shared_ptr<void> bufferCredit;
     uint64_t generation = 0;
     std::string clipId;
     double pts = 0, duration = 1.0 / 30.0;
