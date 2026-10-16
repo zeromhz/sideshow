@@ -103,6 +103,13 @@ ConfigResult parseConfig(std::string_view tomlText) {
     readKey(root, "output", "master_smoothing_ms", c.output.masterSmoothingMs,
             [](float v) { return v >= 0.0f && v <= 5000.0f; }, w);
 
+    readKey(root, "video", "root", c.video.root, nonEmpty, w);
+    readKey(root, "video", "preset", c.video.preset,
+            [](const std::string& v) { return v.empty() || validVideoId(v); }, w);
+    std::string videoEnd = "loop";
+    readKey(root, "video", "end", videoEnd,
+            [](const std::string& v) { return parseVideoEnd(v).has_value(); }, w);
+    c.video.end = *parseVideoEnd(videoEnd);
     std::string mode = "milkdrop";
     readKey(root, "visuals", "mode", mode,
             [](const std::string& v) { return parseVisualMode(v).has_value(); }, w);

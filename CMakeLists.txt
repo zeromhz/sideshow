@@ -19,6 +19,8 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/video_types.cpp
+    src/video_catalog.cpp
     src/visual_controller.cpp
     src/visual_mode.cpp
     src/fluid_playback.cpp
@@ -92,6 +94,7 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_video_catalog.cpp
         tests/test_visual_controller.cpp
         tests/test_fluid_playback.cpp
         tests/test_fluid_presets.cpp

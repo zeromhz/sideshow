@@ -16,6 +16,7 @@ BackendInit VisualController::initializationFor(VisualMode m) const {
     return {config_,settings_,saved_[static_cast<size_t>(m)],width_,height_};
 }
 bool VisualController::setMode(VisualMode target) {
+    if(target==VisualMode::Video) { logWarn("Video backend is not yet available"); return false; }
     if(active_ && mode_==target) return true;
     try {
         auto previous = active_ ? active_->selection() : VisualSelection{};

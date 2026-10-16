@@ -41,3 +41,8 @@ preset = "light-show"
 simulation_resolution = 128
 dye_resolution = 512
 ambient_interval = 2.5
+
+[video]
+root = "/opt/sideshow/videos"
+preset = ""
+end = "loop"

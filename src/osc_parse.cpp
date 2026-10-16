@@ -41,6 +41,7 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
     if (target != "all" && target != panelId) return std::nullopt;
 
     if (args.empty()) {
+        if (name == "video_restart") return cmd::VideoRestart{};
         if (name == "next") return cmd::Next{};
         if (name == "prev") return cmd::Prev{};
         if (name == "random") return cmd::Random{};
@@ -49,7 +50,13 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
     if (args.size() != 1) return std::nullopt;
     const OscArg& arg = args[0];
 
-    if (name == "mode") {
+    if (name == "video_end") {
+        if (auto s = asNonEmptyString(arg))
+            if (auto end = parseVideoEnd(*s)) return cmd::VideoEndMode{*end};
+    } else if (name == "video_pause") {
+        if (auto i = std::get_if<int32_t>(&arg); i && (*i == 0 || *i == 1))
+            return cmd::VideoPause{*i == 1};
+    } else if (name == "mode") {
         if (auto s = asNonEmptyString(arg))
             if (auto mode = parseVisualMode(*s)) return cmd::Mode{*mode};
     } else if (name == "lock") {

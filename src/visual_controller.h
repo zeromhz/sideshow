@@ -21,7 +21,7 @@ private:
     PlaybackSettings settings_;
     int width_,height_;
     BackendFactory factory_;
-    std::array<VisualSelection,2> saved_;
+    std::array<VisualSelection,kVisualModeCount> saved_;
     VisualMode mode_ = VisualMode::Milkdrop;
     std::unique_ptr<VisualBackend> active_;
 };

@@ -9,6 +9,12 @@ class EncodeTest(unittest.TestCase):
         data = encode_message("/sideshow/all/mode", parse_value("mode", "fluid"))
         self.assertEqual(decode_message(data), ("/sideshow/all/mode", ["fluid"]))
 
+    def test_video_controls_round_trip_and_reject_bad_values(self):
+        for command, value, wanted in [("video_end", "loop", ["loop"]), ("video_end", "hold", ["hold"]), ("video_end", "next", ["next"]), ("video_pause", "1", [1]), ("video_restart", None, []), ("preset", "folder/a clip.mp4", ["folder/a clip.mp4"])]:
+            self.assertEqual(decode_message(encode_message("/sideshow/all/"+command, parse_value(command, value))), ("/sideshow/all/"+command, wanted))
+        for command,value in [("video_end","stop"),("video_pause","2"),("video_pause","1.0"),("video_restart","1")]:
+            with self.assertRaises(ValueError): parse_value(command,value)
+
     def test_no_args_pads_address_and_type_tags(self):
         self.assertEqual(encode_message("/a", []), b"/a\0\0,\0\0\0")
 

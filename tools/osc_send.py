@@ -15,6 +15,9 @@ import sys
 import time
 
 ARG_TYPES = {
+    "video_end": str,
+    "video_pause": int,
+    "video_restart": None,
     "next": None,
     "prev": None,
     "random": None,
@@ -68,6 +71,12 @@ def parse_value(command, text):
         return []
     if text is None:
         raise ValueError(f"{command} needs a value")
+    if command == "video_end" and text not in ("loop", "hold", "next"):
+        raise ValueError("video_end needs loop, hold or next")
+    if command == "video_pause":
+        if text not in ("0", "1"):
+            raise ValueError("video_pause needs 0 or 1")
+        return [int(text)]
     if arg_type is str:
         return [text]
     try:

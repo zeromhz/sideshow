@@ -1,6 +1,7 @@
 #pragma once
 
 #include "visual_mode.h"
+#include "video_types.h"
 #include <chrono>
 #include <cstddef>
 #include <mutex>
@@ -12,6 +13,9 @@
 namespace sideshow {
 
 namespace cmd {
+struct VideoEndMode { VideoEnd value; };
+struct VideoPause { bool on; };
+struct VideoRestart {};
 struct Mode { VisualMode value; };
 struct Next {};
 struct Prev {};
@@ -28,7 +32,7 @@ struct HardCut { bool on; };
 
 using Command = std::variant<cmd::Mode, cmd::Next, cmd::Prev, cmd::Random, cmd::Lock, cmd::Playlist,
                              cmd::Preset, cmd::Blackout, cmd::Master, cmd::Duration,
-                             cmd::BeatSensitivity, cmd::HardCut>;
+                             cmd::BeatSensitivity, cmd::HardCut, cmd::VideoEndMode, cmd::VideoPause, cmd::VideoRestart>;
 
 // Bounded multi-producer queue. Blackout and master each have a reserved,
 // latest-value slot so navigation overload cannot discard output controls.
