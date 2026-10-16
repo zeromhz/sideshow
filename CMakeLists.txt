@@ -21,6 +21,9 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/isf_budget.cpp
+    src/isf_images.cpp
+    src/isf_loader.cpp
     src/isf_parameters.cpp
     src/isf_audio.cpp
     src/isf_fft.cpp
@@ -43,7 +46,9 @@ add_library(sideshow_core STATIC
     src/display_mode.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
-target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include)
+target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+find_package(Threads REQUIRED)
+target_link_libraries(sideshow_core PUBLIC Threads::Threads)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
 
@@ -117,6 +122,9 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_isf_budget.cpp
+        tests/test_isf_images.cpp
+        tests/test_isf_loader.cpp
         tests/test_isf_parameters.cpp
         tests/test_isf_audio.cpp
         tests/test_isf_document.cpp
@@ -134,6 +142,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_preset_catalog.cpp
         tests/test_display_mode.cpp
     )
+    target_compile_definitions(sideshow_tests PRIVATE ISF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/isf")
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
     include(Catch)
