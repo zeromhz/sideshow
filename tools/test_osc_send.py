@@ -5,6 +5,10 @@ from osc_send import decode_message, encode_message, parse_value
 
 
 class EncodeTest(unittest.TestCase):
+    def test_mode_is_encoded_as_a_string(self):
+        data = encode_message("/sideshow/all/mode", parse_value("mode", "fluid"))
+        self.assertEqual(decode_message(data), ("/sideshow/all/mode", ["fluid"]))
+
     def test_no_args_pads_address_and_type_tags(self):
         self.assertEqual(encode_message("/a", []), b"/a\0\0,\0\0\0")
 

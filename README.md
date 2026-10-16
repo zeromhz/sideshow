@@ -64,7 +64,8 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 | `master` | float 0–1 | Output brightness (smoothed, curved) |
 | `duration` | float s | Seconds per preset (1–3600) |
 | `beat_sensitivity` | float | 0–2 |
-| `hardcut` | int 0/1 | Beat-triggered hard cuts |
+| `hardcut` | int 0/1 | Beat-triggered hard cuts (MilkDrop only) |
+| `mode` | string | `milkdrop` or `fluid`; cut to the selected visualization |
 
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.
 Ints and floats are interchangeable for toggles and numbers.
@@ -140,3 +141,30 @@ Run this on each new panel, and after any significant change:
 - [ ] Pull the power and restore it: visuals come back on their own
 - [ ] Boot with the screen off, then turn it on: visuals show within a few seconds, at the right resolution
 - [ ] The log line `screen native …, using …` shows the expected mode
+
+## Fluid visualization
+
+Fluid is a native OpenGL adaptation of [Pavel Dobryakov's fluid simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation), with eleven looks adapted from [Chris Pirillo's Oilwheel](https://arcade.pirillo.com/oilwheel.html). It runs without a browser or internet connection, moves in silence, and adds splashes in response to microphone onsets.
+
+```bash
+python3 tools/osc_send.py mode fluid
+python3 tools/osc_send.py preset lava
+python3 tools/osc_send.py --panel panel-03 mode milkdrop
+```
+
+Available fluid presets: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `overhead`. Display names are also accepted, case-insensitively. Overhead inverts the output for a light background.
+
+Each panel runs one mode. Switching cuts immediately and remembers each mode's last selection for this process; returning restarts its animation. Brightness, blackout, duration, lock, and beat sensitivity remain in effect. Fluid supports the built-in `default` playlist only. Preset changes update the ongoing field, so old dye dissipates into the new palette. `hardcut` affects MilkDrop only.
+
+MilkDrop remains the default. See [configuration](docs/configuration.md#fluid-settings) for startup mode and quality settings, and [development](docs/development.md#fluid-rendering-validation) for validation limits.
+
+Additional Pi acceptance checks:
+
+- [ ] Every fluid preset displays its palette and effects, including Overhead inversion.
+- [ ] Quiet-room ambient motion continues; microphone onsets add bounded splashes.
+- [ ] Mic unplug/replug leaves visuals running without repeated stale audio bursts.
+- [ ] Blackout stays black across repeated mode changes and resizing.
+- [ ] Float framebuffer support and manual-filter fallback work on the target GLES driver.
+- [ ] Sustained rendering and switching meet the show's FPS and thermal requirements.
+
+Desktop validation does not establish Raspberry Pi performance; Pi/GLES hardware validation is still required.

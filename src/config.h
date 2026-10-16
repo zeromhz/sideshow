@@ -1,5 +1,6 @@
 #pragma once
 
+#include "visual_mode.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -37,6 +38,14 @@ struct Config {
         float beatSensitivity = 1.0f;
         bool shuffle = true;
     } presets;
+
+    struct Visuals { VisualMode mode = VisualMode::Milkdrop; } visuals;
+    struct Fluid {
+        std::string preset = "light-show";
+        int simulationResolution = 128;
+        int dyeResolution = 512;
+        float ambientInterval = 2.5f;
+    } fluid;
 
     struct Output {
         float masterDefault = 1.0f;

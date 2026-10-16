@@ -28,3 +28,12 @@ shuffle = true
 master_default = 1.0
 master_curve = 2.0
 master_smoothing_ms = 50
+
+[visuals]
+mode = "milkdrop"
+
+[fluid]
+preset = "light-show"
+simulation_resolution = 128
+dye_resolution = 512
+ambient_interval = 2.5

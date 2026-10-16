@@ -32,3 +32,12 @@ shuffle = true
 master_default = 1.0           # brightness at boot, before any OSC master arrives
 master_curve = 2.0             # 1.0 = linear; 2.0 = perceptually even fade
 master_smoothing_ms = 50
+
+[visuals]
+mode = "milkdrop"
+
+[fluid]
+preset = "light-show"
+simulation_resolution = 128
+dye_resolution = 512
+ambient_interval = 2.5

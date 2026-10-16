@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIDESHOW_BUILD_PLAYER "Build sideshow-player (needs projectM, SDL2, liblo)" OFF)
+option(SIDESHOW_BUILD_GL_TESTS "Build optional real-context visualization tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
@@ -18,6 +19,11 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/visual_controller.cpp
+    src/visual_mode.cpp
+    src/fluid_playback.cpp
+    src/fluid_motion.cpp
+    src/fluid_presets.cpp
     src/output_level.cpp
     src/osc_parse.cpp
     src/audio_ring.cpp
@@ -47,19 +53,33 @@ if(SIDESHOW_BUILD_PLAYER)
         set(SIDESHOW_GL_DEFS SIDESHOW_GLES)
     endif()
 
+    add_library(sideshow_fluid STATIC src/fluid_gl.cpp src/fluid_shaders.cpp src/fluid_renderer.cpp)
+    target_compile_definitions(sideshow_fluid PUBLIC ${SIDESHOW_GL_DEFS})
+    target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
+    target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
+    add_library(sideshow_backends STATIC src/fluid_backend.cpp src/milkdrop_backend.cpp
+        src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp)
+    target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
+    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid libprojectM::projectM libprojectM::playlist)
+    if(SIDESHOW_BUILD_GL_TESTS)
+        add_executable(sideshow_gl_tests tests/test_visual_gl.cpp src/fluid_gl.cpp)
+        # Link the instrumented GL ownership boundary in this executable only;
+        # the archive's ordinary fluid_gl object is not extracted by the linker.
+        target_compile_options(sideshow_gl_tests PRIVATE
+            -include ${CMAKE_CURRENT_SOURCE_DIR}/tests/support/fluid_gl_tracking.h)
+        target_compile_definitions(sideshow_gl_tests PRIVATE ${SIDESHOW_GL_DEFS})
+        target_link_libraries(sideshow_gl_tests PRIVATE sideshow_backends SDL2::SDL2 ${SIDESHOW_GL_LIBS})
+    endif()
     add_executable(sideshow-player
         src/main.cpp
         src/display.cpp
-        src/brightness_pass.cpp
-        src/renderer.cpp
         src/audio_capture.cpp
-        src/preset_manager.cpp
         src/osc_server.cpp
     )
     target_compile_definitions(sideshow-player PRIVATE ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow-player PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow-player PRIVATE
-        sideshow_core SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
+        sideshow_backends SDL2::SDL2 Threads::Threads ${SIDESHOW_GL_LIBS}
         libprojectM::projectM libprojectM::playlist PkgConfig::LIBLO)
 endif()
 
@@ -72,6 +92,9 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_visual_controller.cpp
+        tests/test_fluid_playback.cpp
+        tests/test_fluid_presets.cpp
         tests/test_output_level.cpp
         tests/test_command_queue.cpp
         tests/test_osc_parse.cpp

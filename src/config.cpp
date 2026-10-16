@@ -1,4 +1,5 @@
 #include "config.h"
+#include "fluid_presets.h"
 
 #include <fstream>
 #include <optional>
@@ -102,6 +103,24 @@ ConfigResult parseConfig(std::string_view tomlText) {
     readKey(root, "output", "master_smoothing_ms", c.output.masterSmoothingMs,
             [](float v) { return v >= 0.0f && v <= 5000.0f; }, w);
 
+    std::string mode = "milkdrop";
+    readKey(root, "visuals", "mode", mode,
+            [](const std::string& v) { return parseVisualMode(v).has_value(); }, w);
+    c.visuals.mode = *parseVisualMode(mode);
+    readKey(root, "fluid", "preset", c.fluid.preset,
+            [](const std::string& v) { return findFluidPreset(v) != nullptr; }, w);
+    auto resolution = [&](const char* key, int& out, int low, int high) {
+        const auto node = root["fluid"][key];
+        if (node && !node.is_integer()) {
+            w.push_back(std::string("fluid.") + key + ": expected integer, using default");
+            return;
+        }
+        readKey(root, "fluid", key, out, [=](int v) { return v >= low && v <= high; }, w);
+    };
+    resolution("simulation_resolution", c.fluid.simulationResolution, 32, 256);
+    resolution("dye_resolution", c.fluid.dyeResolution, 128, 1024);
+    readKey(root, "fluid", "ambient_interval", c.fluid.ambientInterval,
+            [](float v) { return v >= 0.1f && v <= 60.0f; }, w);
     return result;
 }
 

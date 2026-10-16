@@ -66,3 +66,24 @@ scans at startup; restart after adding presets or playlists.
 Brightness is the smoothed master raised to the curve exponent. Blackout overrides it
 immediately without changing the master target. Disabling blackout reveals the current
 smoothed master level. See [OSC control](../README.md#osc-control) for runtime overrides.
+
+## Fluid settings
+
+```toml
+[visuals]
+mode = "milkdrop" # milkdrop | fluid
+
+[fluid]
+preset = "light-show"
+simulation_resolution = 128 # integer 32–256, shorter dimension
+dye_resolution = 512       # integer 128–1024, shorter dimension
+ambient_interval = 2.5      # 0.1–60 seconds
+```
+
+Quality settings are fixed for the run. Targets preserve drawable aspect ratio, independently of HDMI resolution. Invalid values warn and use defaults. Higher quality requires more GPU memory and time; the defaults are a starting point for Pi benchmarking.
+
+Built-in slugs: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `overhead`. `preset` also accepts case-insensitive display names. Fluid has only the `default` playlist; unknown playlists or presets leave the selection unchanged. `presets.duration`, `presets.shuffle`, and `presets.beat_sensitivity` initialize both modes.
+
+OSC `mode fluid` / `mode milkdrop` switches modes at a frame boundary. The last preset and playlist of each mode are remembered until exit; animation restarts when returning. These changes do not rewrite TOML. Duration, lock, beat sensitivity, master, and blackout are shared. Hardcut is retained for MilkDrop only. Fluid preset changes affect the ongoing field without a full-image crossfade.
+
+A failed switch keeps the active backend. Fluid startup failure falls back to MilkDrop. A fatal fluid rendering failure attempts one MilkDrop recovery, then exits nonzero if recovery fails so systemd can restart. Pong keeps its `string,string,float` signature and reports `fluid/<slug>` in its preset field.
