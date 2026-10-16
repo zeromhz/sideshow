@@ -75,6 +75,7 @@ int main(int argc, char** argv) {
         Display display(config.display);
         VisualController visuals(config,display.drawableWidth(),display.drawableHeight(),
             [](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+                if(mode==VisualMode::Video) throw std::runtime_error("Video backend not yet available");
                 if(mode==VisualMode::Fluid)return std::make_unique<FluidBackend>(init);
                 return std::make_unique<MilkdropBackend>(init);
             });

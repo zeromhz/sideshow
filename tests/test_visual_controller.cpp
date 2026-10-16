@@ -56,3 +56,39 @@ TEST_CASE("Fluid startup failure falls back once and fallback failure propagates
     VisualController v(c,1,1,f); CHECK(v.mode()==VisualMode::Milkdrop);
     CHECK_THROWS(VisualController(c,1,1,[](VisualMode,const BackendInit&)->std::unique_ptr<VisualBackend>{return nullptr;}));
 }
+
+#include "support/pending_video_backend.h"
+TEST_CASE("Pending video receives controls without replacing the active picture") {
+    Config config;int live=0;auto state=std::make_shared<PendingVideoState>();
+    BackendFactory factory=[&](VisualMode m,const BackendInit& i)->std::unique_ptr<VisualBackend> {
+        if(m==VisualMode::Video) return std::make_unique<PendingVideoBackend>(i,state);
+        return std::make_unique<TestBackend>(i,live);
+    };
+    VisualController v(config,320,180,factory);auto before=v.statusPreset();
+    REQUIRE(v.setMode(VisualMode::Video));v.apply(cmd::Preset{"nested/clip.mp4"});
+    v.apply(cmd::VideoEndMode{VideoEnd::Hold});v.apply(cmd::VideoPause{true});v.apply(cmd::VideoRestart{});
+    v.apply(cmd::Lock{true});v.resize(640,360);v.render(.1);v.maintenance();
+    CHECK(v.mode()==VisualMode::Milkdrop);CHECK(v.statusPreset()==before);
+    CHECK(state->selection.preset=="nested/clip.mp4");CHECK(state->paused);CHECK(state->restarts==1);
+    CHECK(state->settings.locked);CHECK(state->width==640);
+    state->state=PreparationState::Ready;v.maintenance();
+    CHECK(v.statusPreset()=="video/nested/clip.mp4");CHECK(live==0);
+    v.setMode(VisualMode::Fluid);state=std::make_shared<PendingVideoState>();v.setMode(VisualMode::Video);
+    CHECK(state->end==VideoEnd::Hold);CHECK_FALSE(state->paused);CHECK(state->selection.preset=="nested/clip.mp4");
+    state->state=PreparationState::Ready;v.maintenance();state->broken=true;v.render(.1);
+    CHECK(v.mode()==VisualMode::Milkdrop);
+}
+TEST_CASE("Superseded and failed video preparation cannot activate later") {
+    Config config;config.visuals.mode=VisualMode::Video;int live=0;
+    auto state=std::make_shared<PendingVideoState>();
+    BackendFactory factory=[&](VisualMode m,const BackendInit& i)->std::unique_ptr<VisualBackend> {
+        if(m==VisualMode::Video) return std::make_unique<PendingVideoBackend>(i,state);
+        return std::make_unique<TestBackend>(i,live);
+    };
+    VisualController v(config,320,180,factory);CHECK(v.mode()==VisualMode::Milkdrop);
+    v.setMode(VisualMode::Milkdrop);state->state=PreparationState::Ready;v.maintenance();
+    CHECK(v.mode()==VisualMode::Milkdrop);
+    state=std::make_shared<PendingVideoState>();v.setMode(VisualMode::Video);
+    state->state=PreparationState::Failed;v.maintenance();CHECK(v.mode()==VisualMode::Milkdrop);
+    v.apply(cmd::VideoPause{true});CHECK_FALSE(state->paused);
+}
