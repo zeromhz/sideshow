@@ -22,7 +22,7 @@ Generated `build/`, `build-*/`, and `deps/` directories are ignored by Git.
 ## macOS player
 
 Install the Xcode command-line tools and Homebrew first. The setup script installs CMake,
-pkg-config, SDL2, and liblo through Homebrew, builds projectM v4.1.7 with its playlist
+pkg-config, SDL2, liblo, and FFmpeg through Homebrew, builds projectM v4.1.7 with its playlist
 library into `deps/install`, and downloads pinned preset/texture packs into `deps`.
 
 ```bash
