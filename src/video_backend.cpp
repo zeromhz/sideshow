@@ -19,15 +19,19 @@ void VideoBackend::tryNext() {
 }
 void VideoBackend::failed(const std::string& error) {logWarn(error);tryNext();}
 bool VideoBackend::selectPreset(const std::string& id) {
-    if(!validVideoId(id)) return false;
-    if(!catalog_) {deferredPreset_=id;deferredFolder_.reset();return true;}
-    if(!catalog_->find(id)) return false;
-    request({id});return true;
+    const bool valid=validVideoId(id);
+    if(!catalog_) {deferredPreset_=id;deferredFolder_.reset();return valid;}
+    const bool found=valid && catalog_->find(id).has_value();
+    // Even a failed selection supersedes a previously requested candidate.
+    request({id});return found;
 }
 bool VideoBackend::selectPlaylist(const std::string& folder) {
-    if(folder!="." && !validVideoId(folder)) return false;
-    if(!catalog_) {deferredFolder_=folder;deferredPreset_.reset();return true;}
-    auto ids=catalog_->inFolder(folder);if(ids.empty()) return false;request(std::move(ids));return true;
+    const bool valid=folder=="." || validVideoId(folder);
+    if(!catalog_) {deferredFolder_=folder;deferredPreset_.reset();return valid;}
+    auto ids=valid ? catalog_->inFolder(folder) : std::vector<std::string>{};
+    const bool found=!ids.empty();
+    if(!found) ids.push_back(""); // worker rejects this candidate, preserving the current decoder
+    request(std::move(ids));return found;
 }
 void VideoBackend::navigate(int direction,bool randomize) {
     if(!catalog_) return;
@@ -49,6 +53,7 @@ void VideoBackend::restart() {
     attempts_.clear();attempt_=0;loading_=true;worker_.rewind(session_,++generation_);
 }
 void VideoBackend::maintenance() {
+    std::optional<VideoFrame> latest;
     for(int count=0;count<8;++count) {
         auto event=worker_.poll(session_);if(!event) break;
         if(event->kind==VideoEventKind::Catalog) {
@@ -67,22 +72,26 @@ void VideoBackend::maintenance() {
         } else if(event->kind==VideoEventKind::Frame && event->frame) {
             if(event->generation!=generation_ && event->generation!=activeGeneration_) continue;
             if(loading_ && event->generation!=generation_) continue;
-            try {presenter_.upload(*event->frame);}
-            catch(const std::exception& e) {
-                if(loading_) {worker_.reject(session_,event->generation);failed(e.what());continue;} throw;
-            }
-            if(loading_) {
-                activeGeneration_=event->generation;clock_.beginClip();loading_=false;attempts_.clear();
-                if(auto clip=catalog_->find(event->frame->clipId)) selection_={clip->folder,clip->id};
-                worker_.commit(session_,activeGeneration_);preparation_={PreparationState::Ready,{}};
-                worker_.playback(session_,0,clock_.paused());
-            }
+            latest=std::move(event->frame);
         } else if(event->kind==VideoEventKind::Eof && event->generation==activeGeneration_ && !loading_)
             clock_.markEof(event->endSeconds);
         else if(event->kind==VideoEventKind::Failed) {
             if(loading_ && event->generation==generation_) failed(event->error);
             else if(event->generation==activeGeneration_) logWarn(event->error);
         }
+    }
+    if(!latest) return;
+    // Coalesce overdue decoded frames before the expensive GPU upload.
+    try {presenter_.upload(*latest);}
+    catch(const std::exception& e) {
+        if(loading_) {worker_.reject(session_,latest->generation);failed(e.what());return;}
+        throw;
+    }
+    if(loading_) {
+        activeGeneration_=latest->generation;clock_.beginClip();loading_=false;attempts_.clear();
+        if(auto clip=catalog_->find(latest->clipId)) selection_={clip->folder,clip->id};
+        worker_.commit(session_,activeGeneration_);preparation_={PreparationState::Ready,{}};
+        worker_.playback(session_,0,clock_.paused());
     }
 }
 void VideoBackend::render(float dt) {

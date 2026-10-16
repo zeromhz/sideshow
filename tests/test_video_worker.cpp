@@ -1,4 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
+#include <atomic>
+
 #include <catch2/catch_approx.hpp>
 
 #include "video_worker.h"
@@ -81,5 +83,29 @@ TEST_CASE("Rejected candidate upload releases candidate and resumes committed cl
     worker.open({session,1,"reordered.mp4"});waitEvent(worker,session,VideoEventKind::Frame);worker.commit(session,1);
     worker.open({session,2,"bars-audio.avi"});waitEvent(worker,session,VideoEventKind::Frame);
     worker.reject(session,2);worker.playback(session,10,false);
+    CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==1);
+}
+TEST_CASE("Failed replacement preserves committed EOF notification") {
+    struct ImmediateEof : VideoSource {
+        std::shared_ptr<std::atomic<bool>> reached;
+        bool first=true;
+        explicit ImmediateEof(std::shared_ptr<std::atomic<bool>> flag):reached(std::move(flag)){}
+        std::optional<VideoFrame> next() override {
+            if(first) {first=false;VideoFrame frame;frame.duration=0;return frame;}
+            *reached=true;return {};
+        }
+        void rewind() override {first=true;}
+    };
+    auto reached=std::make_shared<std::atomic<bool>>(false);
+    VideoWorker worker(videoFixture(""),[&](const auto& file,auto)->std::unique_ptr<VideoSource>{
+        if(file.filename()=="corrupt.mp4") throw std::runtime_error("bad candidate");
+        return std::make_unique<ImmediateEof>(reached);
+    });
+    auto session=worker.acquireSession();waitEvent(worker,session,VideoEventKind::Catalog);
+    worker.open({session,1,"reordered.mp4"});waitEvent(worker,session,VideoEventKind::Frame);worker.commit(session,1);
+    auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+    while(!*reached && std::chrono::steady_clock::now()<deadline) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    REQUIRE(*reached);
+    worker.open({session,2,"corrupt.mp4"});waitEvent(worker,session,VideoEventKind::Failed);
     CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==1);
 }

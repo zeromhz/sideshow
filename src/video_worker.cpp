@@ -18,7 +18,7 @@ struct VideoWorker::Impl {
     uint64_t serial=0, session=0, workerSession=0, committed=0, rewindGeneration=0, activeGeneration=0, rejected=0;
     std::optional<VideoOpenRequest> requested;
     double position=0;
-    bool paused=false;
+    bool paused=false, preparing=false;
     std::deque<VideoEvent> frames;
     std::optional<VideoEvent> catalogEvent,errorEvent,eofEvent,releaseEvent;
     std::shared_ptr<const VideoCatalog> catalog;
@@ -81,7 +81,7 @@ struct VideoWorker::Impl {
             }
             if(requested || rewindGeneration) {
                 auto request=requested;requested.reset();auto rewind=rewindGeneration;rewindGeneration=0;
-                frames.clear();errorEvent.reset();eofEvent.reset();committed=0;
+                frames.clear();errorEvent.reset();committed=0;
                 const uint64_t generation=request?request->generation:rewind;
                 lock.unlock();
                 try {
@@ -107,7 +107,7 @@ struct VideoWorker::Impl {
                     else {lock.unlock();candidate={};lock.lock();}
                 } catch(const std::exception& e) {
                     candidate={};lock.lock();
-                    if(!cancelled()) {errorEvent=event(VideoEventKind::Failed,generation);errorEvent->error=e.what();}
+                    if(!cancelled()) {preparing=false;errorEvent=event(VideoEventKind::Failed,generation);errorEvent->error=e.what();}
                 }
                 continue;
             }
@@ -151,15 +151,15 @@ uint64_t VideoWorker::acquireSession() {
 void VideoWorker::open(VideoOpenRequest request) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
     if(!request.session || request.session!=p.session) return;
-    p.requested=std::move(request);p.rewindGeneration=0;p.frames.clear();p.errorEvent.reset();p.eofEvent.reset();++p.revision;p.wake.notify_all();
+    p.requested=std::move(request);p.rewindGeneration=0;p.frames.clear();p.errorEvent.reset();p.preparing=true;++p.revision;p.wake.notify_all();
 }
 void VideoWorker::commit(uint64_t session,uint64_t generation) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
-    if(session!=p.session) return;p.committed=generation;p.wake.notify_all();
+    if(session!=p.session) return;p.committed=generation;p.preparing=false;p.eofEvent.reset();p.wake.notify_all();
 }
 void VideoWorker::reject(uint64_t session,uint64_t generation) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
-    if(session!=p.session) return;p.rejected=generation;p.wake.notify_all();
+    if(session!=p.session) return;p.rejected=generation;p.preparing=false;p.wake.notify_all();
 }
 void VideoWorker::cancel(uint64_t session) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
@@ -167,7 +167,7 @@ void VideoWorker::cancel(uint64_t session) {
 }
 void VideoWorker::rewind(uint64_t session,uint64_t generation) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
-    if(session!=p.session) return;p.rewindGeneration=generation;p.requested.reset();p.frames.clear();p.errorEvent.reset();p.eofEvent.reset();++p.revision;p.wake.notify_all();
+    if(session!=p.session) return;p.rewindGeneration=generation;p.requested.reset();p.frames.clear();p.errorEvent.reset();p.preparing=true;++p.revision;p.wake.notify_all();
 }
 void VideoWorker::playback(uint64_t session,double position,bool paused) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
@@ -186,7 +186,7 @@ std::optional<VideoEvent> VideoWorker::poll(uint64_t session) {
         (!p.paused && p.frames.front().frame->pts<=p.position))) {
         auto result=std::move(p.frames.front());p.frames.pop_front();p.wake.notify_all();return result;
     }
-    if(p.frames.empty()) if(auto e=take(p.eofEvent)) return e;
+    if(p.frames.empty() && !p.preparing) if(auto e=take(p.eofEvent)) return e;
     return {};
 }
 }

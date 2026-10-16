@@ -117,7 +117,7 @@ The GL test executable uses test-only wrappers around real GL allocation/deletio
 See [local video playback](video.md) for OSC controls, recursive folder semantics,
 configuration, FFmpeg dependencies, architecture limits and hardware validation.
 
-Video validation on the development Mac: full player build; 95 C++ cases (including
+Video validation on the development Mac: full player build; 96 C++ cases (including
 real FFmpeg and worker tests); 11 Python cases; Fluid and Video real GL executables;
 core/decoder AddressSanitizer and UndefinedBehaviorSanitizer; fresh core-only build.
 Local OSC tested nested paths with spaces, pause/restart, loop/hold/next, lock,

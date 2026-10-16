@@ -71,6 +71,14 @@ int main() {
         for(int i=0;i<50;++i) {video.maintenance();video.render(.01);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         require(video.selection().preset=="reordered.mp4","Bad clip replaced selection");
         require(pixel(160,90)==before,"Bad clip replaced picture");
+        video.selectPreset("bars-audio.avi");
+        require(!video.selectPreset("missing.mp4"),"Unknown clip accepted");
+        for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        require(video.selection().preset=="reordered.mp4","Unknown clip did not supersede pending selection");
+        video.selectPreset("bars-audio.avi");
+        require(!video.selectPlaylist("missing folder"),"Unknown folder accepted");
+        for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        require(video.selection().preset=="reordered.mp4","Unknown folder did not supersede pending selection");
         const auto beforeCandidate=fluid_gl_tracking::live;
         video_gl_tracking::failNextUpload=true;video.selectPreset("bars-audio.avi");
         for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -80,6 +88,10 @@ int main() {
         require(video.selection().preset=="reordered.mp4","Candidate failure replaced selection");
         video.restart();for(int i=0;i<50;++i) {video.maintenance();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         video.render(1);require(pixel(160,90)==before,"Paused restart changed first frame");
+        video.setEnd(VideoEnd::Hold);video.setPaused(false);video.render(10);
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        auto uploadsBefore=video_gl_tracking::uploads;video.maintenance();
+        require(video_gl_tracking::uploads-uploadsBefore<=1,"Late frames caused multiple uploads in one maintenance pass");
         require(glGetError()==GL_NO_ERROR,"GL error");
         VideoTree tree;tree.file("nested folder/first.mp4");tree.file("nested folder/second.mp4");
         std::filesystem::copy_file(videoFixture("reordered.mp4"),tree.root/"nested folder/first.mp4",std::filesystem::copy_options::overwrite_existing);
