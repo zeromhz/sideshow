@@ -109,3 +109,11 @@ are ignored, with diagnostics when `SIDESHOW_DEBUG=1`. Numeric commands are clam
 supported ranges. Ping replies read the latest status snapshot, not projectM directly.
 OSC control is unauthenticated UDP; use a trusted stage network. See the
 [command table](../README.md#osc-control) for addresses and argument types.
+
+## Selectable visual backends
+
+`VisualController` owns one `VisualBackend`, shared playback settings, and the last selection of each mode. A candidate is fully initialized before replacing the active backend; failure leaves the old backend alive. Inactive GPU resources are released after a successful switch. Main applies `OutputLevel` through one shared `BrightnessPass` after backend rendering.
+
+`MilkdropBackend` owns Renderer → Catalog → PresetManager in declaration order, ensuring callback teardown precedes projectM destruction. `FluidBackend` composes pure `FluidPlayback`/`FluidMotion` with `FluidRenderer`. The native solver uses ping-pong float targets for velocity, dye, and pressure, followed by optional bloom/sunrays and display shading. `fluid_gl` owns resources and probes renderable formats and interpolation. Shader provenance and MIT notice are in `third_party/fluid`.
+
+Only the main thread touches either backend. The existing bounded command queue and `AudioFeed` remain in the loop. Fluid limits audio onset splashes to three per frame with a 120 ms cooldown and ambient splashes to one per frame. Its simulation timestep is capped at 1/60 second; long gaps never create catch-up loops.

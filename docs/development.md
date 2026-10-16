@@ -90,3 +90,20 @@ performance measurement.
 Dependency versions live in `CMakeLists.txt`, `setup/build_projectm.sh`, and
 `setup/fetch_presets.sh`. The earlier [design](superpowers/specs/2026-09-22-sideshow-player-design.md)
 and [plan](superpowers/plans/2026-09-22-sideshow-player.md) provide historical rationale.
+
+## Fluid rendering validation
+
+The core suite also covers fluid configuration/catalog, navigation and timers, audio/ambient bounds, and transactional mode switching with a GPU-boundary test backend. Optional real-context tests compile shaders, render all eleven presets, exercise conservative RGBA/manual-filter capabilities and resize failures, and switch real Fluid/projectM backends under blackout.
+
+```bash
+cmake -S . -B build -DSIDESHOW_BUILD_PLAYER=ON -DSIDESHOW_BUILD_GL_TESTS=ON \
+  -DCMAKE_PREFIX_PATH="$PWD/deps/install"
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/sideshow_gl_tests
+python3 -m unittest discover -s tools
+```
+
+GL tests are deliberately separate from default CTest and require a working SDL GL context. A missing context is a failed prerequisite, never a passing GPU test. `SIDESHOW_BUILD_GL_TESTS` requires `SIDESHOW_BUILD_PLAYER=ON`.
+
+Validated on the development Mac with desktop GL: shader compilation, all eleven presets, wider float target/manual advection fallback, repeated real backend switches, blackout, resizing, and failed candidate retention. Core tests also run under ASan/UBSan. Raspberry Pi 5 GLES, microphone hardware response, sustained performance/thermals, and systemd recovery remain unverified; use the README hardware checklist before deploying to a show.
