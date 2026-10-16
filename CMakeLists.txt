@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIDESHOW_BUILD_PLAYER "Build sideshow-player (needs projectM, SDL2, liblo)" OFF)
+option(SIDESHOW_BUILD_GL_TESTS "Build optional real-context visualization tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
@@ -52,6 +53,15 @@ if(SIDESHOW_BUILD_PLAYER)
         set(SIDESHOW_GL_DEFS SIDESHOW_GLES)
     endif()
 
+    add_library(sideshow_fluid STATIC src/fluid_gl.cpp src/fluid_shaders.cpp src/fluid_renderer.cpp)
+    target_compile_definitions(sideshow_fluid PUBLIC ${SIDESHOW_GL_DEFS})
+    target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
+    target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
+    if(SIDESHOW_BUILD_GL_TESTS)
+        add_executable(sideshow_gl_tests tests/test_visual_gl.cpp)
+        target_compile_definitions(sideshow_gl_tests PRIVATE ${SIDESHOW_GL_DEFS})
+        target_link_libraries(sideshow_gl_tests PRIVATE sideshow_fluid SDL2::SDL2 ${SIDESHOW_GL_LIBS})
+    endif()
     add_executable(sideshow-player
         src/main.cpp
         src/display.cpp
