@@ -46,3 +46,9 @@ ambient_interval = 2.5
 root = "/opt/sideshow/videos"
 preset = ""
 end = "loop"
+
+[isf]
+root = "/opt/sideshow/isf"
+preset = "examples/plasma.fs"
+max_width = 1280
+max_height = 720

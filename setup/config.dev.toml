@@ -42,3 +42,9 @@ ambient_interval = 2.5
 root = "deps/videos"
 preset = ""
 end = "loop"
+
+[isf]
+root = "deps/isf"
+preset = "examples/plasma.fs"
+max_width = 1280
+max_height = 720

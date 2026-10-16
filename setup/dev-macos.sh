@@ -10,6 +10,7 @@ brew install cmake pkg-config sdl2 liblo ffmpeg
 "$REPO_DIR/setup/fetch_presets.sh" "$REPO_DIR/deps"
 
 mkdir -p "$REPO_DIR/deps/videos"
+"$REPO_DIR/setup/install_isf_examples.sh" "$REPO_DIR/deps/isf"
 
 cat <<EOF
 

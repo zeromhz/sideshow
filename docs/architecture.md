@@ -1,7 +1,8 @@
 # Architecture
 
 Sideshow runs one C++17 process, `sideshow-player`, per Raspberry Pi 5. Each panel
-generates its own audio-reactive MilkDrop visuals using projectM and a local microphone.
+runs one selectable mode: MilkDrop, Fluid, local Video, or ISF generators.
+A local microphone drives audio-reactive modes.
 OSC provides live control, but rendering does not require a network connection.
 Broadcast commands can address multiple panels; there is no shared clock or synchronized
 preset playback. Camera input, a web UI, direct MIDI input, and persistence of OSC changes
@@ -35,10 +36,10 @@ and OSC server. The declaration order in `main.cpp` ensures these are destroyed 
 the OSC server and capture stop before their shared data disappears, and projectM is destroyed
 before the GL context. SDL quits afterward. SIGINT, SIGTERM, and SDL quit events stop the loop.
 
-Three execution contexts exchange data:
+Audio and OSC exchange data with the main loop; Video and ISF also own CPU workers:
 
 ```text
-SDL audio callback --> AudioRing ----> main loop --> projectM --> brightness pass --> display
+SDL audio callback --> AudioRing ----> main loop --> active backend --> brightness pass --> display
 liblo OSC thread ---> CommandQueue -> main loop
 liblo OSC thread <--- PlayerStatus <-- main loop (roughly once per second)
 ```
@@ -54,7 +55,7 @@ A single projectM preset load cannot be interrupted, so this bounds additional q
 not the duration of that load.
 
 Each frame processes SDL events, handles a pending preset failure, applies queued commands,
-retries audio capture if needed, feeds a snapshot of buffered PCM to projectM, updates output brightness,
+retries audio capture if needed, feeds fresh buffered PCM to active and pending backends, updates output brightness,
 renders, swaps buffers, and periodically publishes preset/FPS status. Vsync is requested;
 the loop also delays according to the configured FPS budget.
 
@@ -65,7 +66,7 @@ builds use OpenGL ES 3; macOS uses OpenGL 3.3 core. Fullscreen selection conside
 native mode, configured caps, aspect ratio, and refresh rate. Explicit supported dimensions
 take precedence. If no mode fits the caps, the implementation falls back to the native mode.
 
-projectM renders to the default framebuffer. A fullscreen triangle then multiplies its
+The active backend renders to the default framebuffer. A fullscreen triangle then multiplies its
 color by `pow(smoothed_master, master_curve)`. Master uses exponential smoothing with
 the configured time constant. Blackout immediately forces brightness to zero while the
 master continues smoothing and projectM continues rendering.
@@ -122,3 +123,24 @@ Only the main thread touches either backend. The existing bounded command queue 
 
 See [local video playback](video.md) for OSC controls, recursive folder semantics,
 configuration, FFmpeg dependencies, architecture limits and hardware validation.
+
+## ISF mode
+
+`isf_catalog`, `isf_document` and `isf_files` discover and validate sources with
+root-relative, no-follow file access. `isf_loader` owns one CPU worker and passes
+immutable snapshots tagged by session/generation; retired snapshots are released
+on the worker. `isf_images` decodes bounded PNG/JPEG imports. `isf_parameters`
+validates typed controls; `isf_audio`/`isf_fft` maintain waveform and spectrum.
+
+`isf_services` owns the loader, global texture budget and lazy adopted SDL GL
+context. `isf_runtime` owns a private VVISF scene/pool, pass textures and leases;
+`isf_presenter` fits its output over black before the shared brightness stage.
+The SDL context outlives these objects and remains owned by the host. Loader
+shutdown joins before service/context destruction. No worker owns GL objects.
+
+`isf_backend` commits a candidate only after successful first-frame rendering.
+The controller routes selection/ISF controls to a pending mode and feeds fresh
+PCM to both active and pending backends. Capture stalls clear both histories.
+Generation checks discard superseded results and pending controls. Filesystem
+work is asynchronous; shader compilation still runs synchronously on the GL
+thread. See [ISF limits](isf.md) and [validation](superpowers/isf-validation.md).

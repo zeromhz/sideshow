@@ -1,10 +1,13 @@
 #include "support/isf_gl_context.h"
 #include "isf_runtime.h"
+#include "fluid_gl.h"
 #include "isf_document.h"
 #include "gl.h"
 #include <iostream>
 #include <array>
 #include <cmath>
+#include <fstream>
+#include <numeric>
 using namespace sideshow;
 static std::array<unsigned char,4> pixel(int x,int y){std::array<unsigned char,4> p{};glReadPixels(x,y,1,1,GL_RGBA,GL_UNSIGNED_BYTE,p.data());return p;}
 static std::shared_ptr<IsfSource> source(const std::string& text){auto s=std::make_shared<IsfSource>();s->document=parseIsfDocument("test.fs",text,"");return s;}
@@ -65,5 +68,20 @@ void main(){gl_FragColor=vec4(IMG_PIXEL(fft,vec2(32.5,0.5)).r,0,0,1);})");
  requireIsf(std::get<double>(d.at("f"))==.5,"missing float default changed");requireIsf(std::get<int32_t>(d.at("i"))==0&&std::get<bool>(d.at("b")),"scalar default changed");requireIsf(std::get<std::array<double,2>>(d.at("p"))==std::array<double,2>{0,0},"point default changed");requireIsf(std::get<std::array<double,4>>(d.at("c"))==std::array<double,4>{0,0,0,0},"color default changed");
  }
  {IsfBudget small(10000);bool rejected=false;try{auto s=source(R"(/*{"PASSES":[{"TARGET":"history","WIDTH":1024,"HEIGHT":1024,"PERSISTENT":true},{}]}*/void main(){gl_FragColor=vec4(1);})");IsfRuntime r(context,small,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());r.draw(p,audio,0,0,0);}catch(const std::exception&){rejected=true;}requireIsf(rejected&&small.used()==0,"internal pass allocation bypassed budget");}
+
+ for(const char* name:{"plasma.fs","spectrum.fs","feedback.fs"}) {
+ std::ifstream input(std::string(ISF_ASSET_DIR)+"/examples/"+name);requireIsf(bool(input),"bundled shader missing");std::string text{std::istreambuf_iterator<char>(input),{}};auto s=source(text);IsfRuntime r(context,budget,s,64,64);IsfParameters p(s->document.inputs);p.initializeDefaults(r.defaults());
+ auto energy=[&](){r.present(320,180);std::vector<unsigned char> pixels(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());uint64_t sum=0;for(size_t n=0;n<pixels.size();n+=4)sum+=pixels[n]+pixels[n+1]+pixels[n+2];return sum;};
+ r.draw(p,audio,0,0,0);auto initial=energy();requireIsf(initial>0,"bundled shader rendered black");
+ if(std::string(name)=="spectrum.fs"){IsfAudio sine;std::vector<float> pcm(2048);for(int n=0;n<1024;++n)pcm[n*2]=std::sin(2*3.141592653589793*32*n/1024);sine.append(pcm.data(),1024);r.draw(p,sine,.1,.1,1);requireIsf(energy()>initial,"bundled spectrum did not react to sine");}
+ if(std::string(name)=="feedback.fs"){r.draw(p,audio,0,0,1);requireIsf(energy()>initial,"bundled feedback did not retain history");std::string why;p.trigger("reset",why);r.draw(p,audio,0,0,2);requireIsf(energy()==initial,"bundled feedback reset failed");}
+ }
+ {
+ auto s=source("/*{}*/void main(){gl_FragColor=vec4(1,0,0,1);}");
+ IsfRuntime r(context,budget,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());
+ r.draw(p,audio,0,0,0);
+ {fluid_gl::Program departing("void main(){gl_Position=vec4(0);}","out vec4 c;void main(){c=vec4(1);}");departing.use();}
+ r.present(320,180);r.draw(p,audio,.1,.1,1);r.present(320,180);requireIsf(pixel(160,90)[0]==255,"departing mode program broke ISF");
+ }
  std::cout<<"ISF runtime checks passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

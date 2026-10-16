@@ -47,6 +47,7 @@ echo "==> Fetching presets and textures"
 "$REPO_DIR/setup/fetch_presets.sh" "$INSTALL_ROOT"
 
 install -d -m 0755 "$INSTALL_ROOT/videos"
+"$REPO_DIR/setup/install_isf_examples.sh" "$INSTALL_ROOT/isf"
 
 echo "==> Writing config"
 install -d /etc/sideshow
