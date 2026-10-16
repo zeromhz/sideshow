@@ -22,6 +22,22 @@ void checked(int result, const char* operation) {
     char message[AV_ERROR_MAX_STRING_SIZE]; av_strerror(result,message,sizeof(message));
     throw std::runtime_error(std::string(operation)+": "+message);
 }
+int openLocal(const std::filesystem::path& path) {
+    // Walk directory descriptors: a concurrent symlink replacement cannot redirect an open.
+    auto absolute=std::filesystem::absolute(path);
+    int parent=::open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC);
+    if(parent<0) return -1;
+    auto relative=absolute.relative_path();
+    for(auto it=relative.begin();it!=relative.end();++it) {
+        if(*it==".." || *it==".") {close(parent);errno=EACCES;return -1;}
+        auto next=it;++next;
+        const int flags=O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK|(next==relative.end()?0:O_DIRECTORY);
+        int child=openat(parent,it->c_str(),flags);int error=errno;close(parent);
+        if(child<0) {errno=error;return -1;}
+        parent=child;
+    }
+    return parent;
+}
 bool hdr(AVColorTransferCharacteristic transfer) {
     return transfer == AVCOL_TRC_SMPTE2084 || transfer == AVCOL_TRC_ARIB_STD_B67;
 }
@@ -71,7 +87,7 @@ struct VideoDecoder::Impl {
     static int denyOpen(AVFormatContext*,AVIOContext**,const char*,int,AVDictionary**) { return AVERROR(EACCES); }
     void open(const std::filesystem::path& path) {
         start();
-        fd=::open(path.c_str(),O_RDONLY|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK);
+        fd=openLocal(path);
         struct stat st{};
         if(fd<0 || fstat(fd,&st)!=0 || !S_ISREG(st.st_mode)) throw std::runtime_error("Video input is not an accessible regular file");
         auto buffer=static_cast<unsigned char*>(av_malloc(32768));

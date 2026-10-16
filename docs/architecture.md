@@ -117,3 +117,8 @@ OSC control is unauthenticated UDP; use a trusted stage network. See the
 `MilkdropBackend` owns Renderer → Catalog → PresetManager in declaration order, ensuring callback teardown precedes projectM destruction. `FluidBackend` composes pure `FluidPlayback`/`FluidMotion` with `FluidRenderer`. The native solver uses ping-pong float targets for velocity, dye, and pressure, followed by optional bloom/sunrays and display shading. `fluid_gl` owns resources and probes renderable formats and interpolation. Shader provenance and MIT notice are in `third_party/fluid`.
 
 Only the main thread touches either backend. The existing bounded command queue and `AudioFeed` remain in the loop. Fluid limits audio onset splashes to three per frame with a 120 ms cooldown and ambient splashes to one per frame. Its simulation timestep is capped at 1/60 second; long gaps never create catch-up loops.
+
+## Video mode
+
+See [local video playback](video.md) for OSC controls, recursive folder semantics,
+configuration, FFmpeg dependencies, architecture limits and hardware validation.

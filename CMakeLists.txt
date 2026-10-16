@@ -70,11 +70,14 @@ if(SIDESHOW_BUILD_PLAYER)
     target_compile_definitions(sideshow_fluid PUBLIC ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
-    add_library(sideshow_backends STATIC src/fluid_backend.cpp src/milkdrop_backend.cpp
+    add_library(sideshow_backends STATIC src/video_presenter.cpp src/video_backend.cpp src/fluid_backend.cpp src/milkdrop_backend.cpp
         src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp)
     target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
-    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid libprojectM::projectM libprojectM::playlist)
+    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid sideshow_video libprojectM::projectM libprojectM::playlist)
     if(SIDESHOW_BUILD_GL_TESTS)
+        add_executable(sideshow_video_gl_tests tests/test_video_gl.cpp)
+        target_compile_definitions(sideshow_video_gl_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video" ${SIDESHOW_GL_DEFS})
+        target_link_libraries(sideshow_video_gl_tests PRIVATE sideshow_backends sideshow_video SDL2::SDL2 ${SIDESHOW_GL_LIBS})
         add_executable(sideshow_gl_tests tests/test_visual_gl.cpp src/fluid_gl.cpp)
         # Link the instrumented GL ownership boundary in this executable only;
         # the archive's ordinary fluid_gl object is not extracted by the linker.

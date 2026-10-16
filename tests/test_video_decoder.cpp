@@ -1,4 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
+#include "support/video_tree.h"
+
 #include <catch2/catch_approx.hpp>
 #include "video_decoder.h"
 #include "support/video_fixtures.h"
@@ -36,4 +38,8 @@ TEST_CASE("Video dimensions are bounded before allocating frames") {
     CHECK_THROWS(videoOutputSize(4096,4096));
     CHECK(videoOutputSize(3840,2160)==std::pair<int,int>{1920,1080});
     CHECK(videoOutputSize(2160,3840)==std::pair<int,int>{1080,1920});
+}
+TEST_CASE("Decoder refuses symlink components even when a catalog check raced") {
+    VideoTree tree;tree.symlink("alias",videoFixture(""));
+    CHECK_THROWS(VideoDecoder(tree.root/"alias/reordered.mp4",[]{return false;}));
 }

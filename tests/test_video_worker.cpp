@@ -75,3 +75,11 @@ TEST_CASE("Video worker counts polled frames against the three frame budget") {
     CHECK_FALSE(worker.poll(session));
     held.clear();CHECK(waitEvent(worker,session,VideoEventKind::Frame).frame.has_value());
 }
+TEST_CASE("Rejected candidate upload releases candidate and resumes committed clip") {
+    VideoWorker worker(videoFixture(""));auto session=worker.acquireSession();
+    waitEvent(worker,session,VideoEventKind::Catalog);
+    worker.open({session,1,"reordered.mp4"});waitEvent(worker,session,VideoEventKind::Frame);worker.commit(session,1);
+    worker.open({session,2,"bars-audio.avi"});waitEvent(worker,session,VideoEventKind::Frame);
+    worker.reject(session,2);worker.playback(session,10,false);
+    CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==1);
+}

@@ -168,3 +168,8 @@ Additional Pi acceptance checks:
 - [ ] Sustained rendering and switching meet the show's FPS and thermal requirements.
 
 Desktop validation does not establish Raspberry Pi performance; Pi/GLES hardware validation is still required.
+
+## Video mode
+
+See [local video playback](docs/video.md) for OSC controls, recursive folder semantics,
+configuration, FFmpeg dependencies, architecture limits and hardware validation.

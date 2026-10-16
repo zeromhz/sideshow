@@ -15,7 +15,7 @@ struct VideoWorker::Impl {
     std::atomic<uint64_t> revision{0};
     // The decoder callback runs on this worker only; a control change interrupts its operation.
     uint64_t executingRevision=0;
-    uint64_t serial=0, session=0, workerSession=0, committed=0, rewindGeneration=0, activeGeneration=0;
+    uint64_t serial=0, session=0, workerSession=0, committed=0, rewindGeneration=0, activeGeneration=0, rejected=0;
     std::optional<VideoOpenRequest> requested;
     double position=0;
     bool paused=false;
@@ -111,6 +111,9 @@ struct VideoWorker::Impl {
                 }
                 continue;
             }
+            if(candidate.source && rejected==candidate.generation) {
+                lock.unlock();candidate={};lock.lock();rejected=0;
+            }
             if(candidate.source) {
                 if(committed==candidate.generation) {
                     lock.unlock();current=std::move(candidate);candidate={};lock.lock();committed=0;
@@ -153,6 +156,10 @@ void VideoWorker::open(VideoOpenRequest request) {
 void VideoWorker::commit(uint64_t session,uint64_t generation) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
     if(session!=p.session) return;p.committed=generation;p.wake.notify_all();
+}
+void VideoWorker::reject(uint64_t session,uint64_t generation) {
+    auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
+    if(session!=p.session) return;p.rejected=generation;p.wake.notify_all();
 }
 void VideoWorker::cancel(uint64_t session) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);

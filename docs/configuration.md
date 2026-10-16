@@ -87,3 +87,8 @@ Built-in slugs: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-
 OSC `mode fluid` / `mode milkdrop` switches modes at a frame boundary. The last preset and playlist of each mode are remembered until exit; animation restarts when returning. These changes do not rewrite TOML. Duration, lock, beat sensitivity, master, and blackout are shared. Hardcut is retained for MilkDrop only. Fluid preset changes affect the ongoing field without a full-image crossfade.
 
 A failed switch keeps the active backend. Fluid startup failure falls back to MilkDrop. A fatal fluid rendering failure attempts one MilkDrop recovery, then exits nonzero if recovery fails so systemd can restart. Pong keeps its `string,string,float` signature and reports `fluid/<slug>` in its preset field.
+
+## Video mode
+
+See [local video playback](video.md) for OSC controls, recursive folder semantics,
+configuration, FFmpeg dependencies, architecture limits and hardware validation.

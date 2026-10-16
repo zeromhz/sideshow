@@ -20,6 +20,7 @@ public:
     void open(VideoOpenRequest request);
     void commit(uint64_t session,uint64_t generation);
     void cancel(uint64_t session);
+    void reject(uint64_t session,uint64_t generation);
     void rewind(uint64_t session,uint64_t newGeneration);
     void playback(uint64_t session,double position,bool paused);
     std::optional<VideoEvent> poll(uint64_t session);
