@@ -11,6 +11,7 @@ option(SIDESHOW_BUILD_VIDEO_TESTS "Build FFmpeg decoder and worker tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
+include(cmake/IsfSource.cmake)
 
 FetchContent_Declare(tomlplusplus
     GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
@@ -20,6 +21,9 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/isf_document.cpp
+    src/isf_catalog.cpp
+    src/isf_files.cpp
     src/video_playback.cpp
     src/video_types.cpp
     src/video_catalog.cpp
@@ -36,6 +40,7 @@ add_library(sideshow_core STATIC
     src/display_mode.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
+target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
 
@@ -109,6 +114,8 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_isf_document.cpp
+        tests/test_isf_catalog.cpp
         tests/test_video_catalog.cpp
         tests/test_video_playback.cpp
         tests/test_visual_controller.cpp
