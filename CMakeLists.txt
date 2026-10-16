@@ -21,6 +21,9 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/isf_parameters.cpp
+    src/isf_audio.cpp
+    src/isf_fft.cpp
     src/isf_document.cpp
     src/isf_catalog.cpp
     src/isf_files.cpp
@@ -114,6 +117,8 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_isf_parameters.cpp
+        tests/test_isf_audio.cpp
         tests/test_isf_document.cpp
         tests/test_isf_catalog.cpp
         tests/test_video_catalog.cpp
@@ -160,4 +165,9 @@ if(SIDESHOW_BUILD_ISF_TESTS)
     add_executable(sideshow_isf_context_tests tests/test_isf_context_gl.cpp)
     target_include_directories(sideshow_isf_context_tests PRIVATE src)
     target_link_libraries(sideshow_isf_context_tests PRIVATE SDL2::SDL2 sideshow_isf_context)
+endif()
+if(SIDESHOW_BUILD_PLAYER AND SIDESHOW_BUILD_TESTS)
+    add_executable(sideshow_isf_wire_tests tests/test_isf_osc_wire.cpp src/osc_server.cpp)
+    target_link_libraries(sideshow_isf_wire_tests PRIVATE sideshow_core PkgConfig::LIBLO Catch2::Catch2WithMain)
+    catch_discover_tests(sideshow_isf_wire_tests)
 endif()

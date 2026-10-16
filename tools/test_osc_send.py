@@ -1,3 +1,5 @@
+import osc_send
+
 import struct
 import unittest
 
@@ -65,3 +67,18 @@ class ParseValueTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class IsfControls(unittest.TestCase):
+    def test_typed_packet_roundtrip(self):
+        args = osc_send.parse_values('isf_param', ['tint', '1', '0.25', '1e-1', '0'])
+        self.assertEqual(args, ['tint', 1, 0.25, 0.1, 0])
+        packet = osc_send.encode_message('/sideshow/all/isf_param', args)
+        address, decoded = osc_send.decode_message(packet)
+        self.assertEqual(address, '/sideshow/all/isf_param')
+        self.assertEqual(decoded[:3], ['tint', 1, 0.25])
+        self.assertIn(b',siffi', packet)
+    def test_bad_shapes_and_numbers(self):
+        for args in [[], ['x'], ['x','1','2','3'], ['x','2147483648'], ['x','nan'], ['x','1e100']]:
+            with self.assertRaises(ValueError): osc_send.parse_values('isf_param', args)
+        self.assertEqual(osc_send.parse_values('isf_event', ['reset']), ['reset'])
+        with self.assertRaises(ValueError): osc_send.parse_values('isf_event', ['reset','1'])

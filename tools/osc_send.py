@@ -9,12 +9,15 @@ Examples:
 """
 import argparse
 import math
+import re
 import socket
 import struct
 import sys
 import time
 
 ARG_TYPES = {
+    "isf_param": str,
+    "isf_event": str,
     "video_end": str,
     "video_pause": int,
     "video_restart": None,
@@ -90,6 +93,33 @@ def parse_value(command, text):
     return [number]
 
 
+def parse_values(command, texts):
+    if command not in ("isf_param", "isf_event"):
+        if len(texts) > 1:
+            raise ValueError(f"{command} takes at most one value")
+        return parse_value(command, texts[0] if texts else None)
+    if not texts or not texts[0] or "\0" in texts[0]:
+        raise ValueError("ISF control needs an input name")
+    if command == "isf_event":
+        if len(texts) != 1:
+            raise ValueError("isf_event takes one name")
+        return texts
+    if len(texts) not in (2, 3, 5):
+        raise ValueError("isf_param takes a name and 1, 2 or 4 numbers")
+    result = [texts[0]]
+    for text in texts[1:]:
+        if re.fullmatch(r"[+-]?[0-9]+", text):
+            value = int(text)
+            if not -(2**31) <= value < 2**31:
+                raise ValueError("ISF integer exceeds int32")
+        else:
+            value = float(text)
+            if not math.isfinite(value) or abs(value) > FLOAT32_MAX:
+                raise ValueError("ISF float exceeds float32")
+        result.append(value)
+    return result
+
+
 def _read_string(data, offset):
     end = data.index(b"\0", offset)
     text = data[offset:end].decode(errors="replace")
@@ -136,7 +166,7 @@ def main():
     parser.add_argument("--port", type=int, default=9000)
     parser.add_argument("--panel", default="all", help="panel id, or 'all' (default)")
     parser.add_argument("command", choices=sorted(ARG_TYPES) + ["ping"])
-    parser.add_argument("value", nargs="?")
+    parser.add_argument("value", nargs="*")
     options = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -147,7 +177,7 @@ def main():
         return 0
 
     try:
-        args = parse_value(options.command, options.value)
+        args = parse_values(options.command, options.value)
     except ValueError as error:
         parser.error(str(error))
     address = f"/sideshow/{options.panel}/{options.command}"
