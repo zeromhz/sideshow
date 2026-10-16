@@ -1,6 +1,7 @@
 #pragma once
 
 #include "visual_mode.h"
+#include "video_types.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -46,6 +47,12 @@ struct Config {
         int dyeResolution = 512;
         float ambientInterval = 2.5f;
     } fluid;
+
+    struct Video {
+        std::string root = "/opt/sideshow/videos";
+        std::string preset;
+        VideoEnd end = VideoEnd::Loop;
+    } video;
 
     struct Output {
         float masterDefault = 1.0f;

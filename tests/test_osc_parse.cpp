@@ -107,3 +107,14 @@ TEST_CASE("OSC accepts supported visualization modes only") {
     CHECK(parseOscMessage("panel-01", "/sideshow/all/mode", {std::string("milkdrop")}));
     CHECK_FALSE(parseOscMessage("panel-01", "/sideshow/all/mode", {std::string("browser")}));
 }
+TEST_CASE("Video commands validate their exact OSC payloads") {
+    CHECK(parseOscMessage("dev","/sideshow/all/mode",{std::string("video")}));
+    for(auto end:{"loop","hold","next"})CHECK(parseOscMessage("dev","/sideshow/all/video_end",{std::string(end)}));
+    CHECK_FALSE(parseOscMessage("dev","/sideshow/all/video_end",{std::string("stop")}));
+    CHECK(parseOscMessage("dev","/sideshow/all/video_pause",{int32_t(0)}));
+    CHECK(parseOscMessage("dev","/sideshow/all/video_pause",{int32_t(1)}));
+    CHECK_FALSE(parseOscMessage("dev","/sideshow/all/video_pause",{int32_t(2)}));
+    CHECK_FALSE(parseOscMessage("dev","/sideshow/all/video_pause",{1.0f}));
+    CHECK(parseOscMessage("dev","/sideshow/all/video_restart",{}));
+    CHECK_FALSE(parseOscMessage("dev","/sideshow/all/video_restart",{int32_t(1)}));
+}

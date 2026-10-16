@@ -17,12 +17,16 @@ public:
 private:
     BackendInit initializationFor(VisualMode mode) const;
     void recover();
+    void activate(std::unique_ptr<VisualBackend>, VisualMode);
+    void updateSettings();
     Config config_;
     PlaybackSettings settings_;
     int width_,height_;
     BackendFactory factory_;
-    std::array<VisualSelection,2> saved_;
+    std::array<VisualSelection,kVisualModeCount> saved_;
     VisualMode mode_ = VisualMode::Milkdrop;
-    std::unique_ptr<VisualBackend> active_;
+    std::unique_ptr<VisualBackend> active_, pending_;
+    VisualMode pendingMode_=VisualMode::Milkdrop;
+    VideoEnd videoEnd_=VideoEnd::Loop;
 };
 }

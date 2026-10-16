@@ -1,5 +1,6 @@
 #pragma once
 #include "config.h"
+#include "video_control.h"
 #include <functional>
 #include <memory>
 namespace sideshow {
@@ -9,10 +10,14 @@ struct PlaybackSettings {
     float beatSensitivity = 1.0f;
 };
 struct VisualSelection { std::string playlist, preset; };
-struct BackendInit { Config config; PlaybackSettings playback; VisualSelection selection; int width, height; };
+struct BackendInit { Config config; PlaybackSettings playback; VisualSelection selection; int width, height; VideoEnd videoEnd=VideoEnd::Loop; };
+enum class PreparationState { Pending, Ready, Failed };
+struct PreparationResult { PreparationState state; std::string error; };
 class VisualBackend {
 public:
     virtual ~VisualBackend() = default;
+    virtual PreparationResult preparation() { return {PreparationState::Ready,{}}; }
+    virtual VideoControl* videoControl() { return nullptr; }
     virtual void maintenance() = 0;
     virtual void addPcm(const float*, size_t) = 0;
     virtual void render(float) = 0;

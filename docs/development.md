@@ -22,7 +22,7 @@ Generated `build/`, `build-*/`, and `deps/` directories are ignored by Git.
 ## macOS player
 
 Install the Xcode command-line tools and Homebrew first. The setup script installs CMake,
-pkg-config, SDL2, and liblo through Homebrew, builds projectM v4.1.7 with its playlist
+pkg-config, SDL2, liblo, and FFmpeg through Homebrew, builds projectM v4.1.7 with its playlist
 library into `deps/install`, and downloads pinned preset/texture packs into `deps`.
 
 ```bash
@@ -111,3 +111,18 @@ Validated on the development Mac with desktop GL: shader compilation, all eleven
 On 2026-10-16 the development Mac (arm64, OpenGL 4.1 Metal 90.5) reported 59.1–60.1 FPS after warm-up at a 1280×720 drawable with default simulation/dye quality. This short desktop sample is not a Pi benchmark or sustained thermal test. Live OSC switching restored `fluid/lava` and the previous MilkDrop preset. A projectM texture warning reproduced with the unchanged baseline player as well.
 
 The GL test executable uses test-only wrappers around real GL allocation/deletion calls to verify resource cleanup after injected shader failure and failed candidate initialization. Production builds do not include those wrappers.
+
+## Video mode
+
+See [local video playback](video.md) for OSC controls, recursive folder semantics,
+configuration, FFmpeg dependencies, architecture limits and hardware validation.
+
+Video validation on the development Mac: full player build; 96 C++ cases (including
+real FFmpeg and worker tests); 11 Python cases; Fluid and Video real GL executables;
+core/decoder AddressSanitizer and UndefinedBehaviorSanitizer; fresh core-only build.
+Local OSC tested nested paths with spaces, pause/restart, loop/hold/next, lock,
+blackout, and return to both other modes. A synthetic 64×48 H.264 clip at a 2560×1440
+Retina drawable ran at approximately 59 FPS. This is a small desktop smoke test,
+not evidence of 1080p decoding throughput or Raspberry Pi performance. Development
+libraries were libavformat/libavcodec 63.1.102, libavutil 61.1.102, libswscale 10.1.102.
+Actual FFmpeg 5.1 compilation and Pi/GLES hardware checks remain outstanding.

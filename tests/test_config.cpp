@@ -137,3 +137,19 @@ TEST_CASE("Config: a missing file gives defaults and a warning") {
     CHECK(r.config.panelId == "panel-01");
     CHECK(hasWarningContaining(r, "not found"));
 }
+
+TEST_CASE("Video configuration defaults and validated selections") {
+    auto defaults = parseConfig("");
+    CHECK(defaults.config.video.root == "/opt/sideshow/videos");
+    CHECK(defaults.config.video.preset.empty());
+    CHECK(defaults.config.video.end == VideoEnd::Loop);
+    auto valid = parseConfig("[visuals]\nmode='video'\n[video]\nroot='clips'\npreset='live/intro.mp4'\nend='hold'\n");
+    CHECK(valid.warnings.empty());
+    CHECK(valid.config.visuals.mode == VisualMode::Video);
+    CHECK(valid.config.video.preset == "live/intro.mp4");
+    CHECK(valid.config.video.end == VideoEnd::Hold);
+    auto invalid = parseConfig("[video]\nroot=7\npreset='../escape.mp4'\nend='stop'\n");
+    CHECK(invalid.warnings.size() == 3);
+    CHECK(invalid.config.video.preset.empty());
+    CHECK(invalid.config.video.end == VideoEnd::Loop);
+}

@@ -25,6 +25,7 @@
 #include "visual_controller.h"
 #include "milkdrop_backend.h"
 #include "fluid_backend.h"
+#include "video_backend.h"
 #include "brightness_pass.h"
 
 using namespace sideshow;
@@ -73,8 +74,10 @@ int main(int argc, char** argv) {
     try {
         // Declaration order matters: later objects are destroyed first.
         Display display(config.display);
+        VideoWorker videoWorker(config.video.root);
         VisualController visuals(config,display.drawableWidth(),display.drawableHeight(),
-            [](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+            [&videoWorker](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+                if(mode==VisualMode::Video) return std::make_unique<VideoBackend>(init,videoWorker);
                 if(mode==VisualMode::Fluid)return std::make_unique<FluidBackend>(init);
                 return std::make_unique<MilkdropBackend>(init);
             });

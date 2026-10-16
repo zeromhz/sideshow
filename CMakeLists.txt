@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(SIDESHOW_BUILD_PLAYER "Build sideshow-player (needs projectM, SDL2, liblo)" OFF)
 option(SIDESHOW_BUILD_GL_TESTS "Build optional real-context visualization tests" OFF)
+option(SIDESHOW_BUILD_VIDEO_TESTS "Build FFmpeg decoder and worker tests" OFF)
 option(SIDESHOW_BUILD_TESTS "Build unit tests" ON)
 
 include(FetchContent)
@@ -19,6 +20,9 @@ FetchContent_MakeAvailable(tomlplusplus)
 
 # Pure logic with no GPU/audio/network dependencies -- unit tested on any machine.
 add_library(sideshow_core STATIC
+    src/video_playback.cpp
+    src/video_types.cpp
+    src/video_catalog.cpp
     src/visual_controller.cpp
     src/visual_mode.cpp
     src/fluid_playback.cpp
@@ -34,6 +38,15 @@ add_library(sideshow_core STATIC
 target_include_directories(sideshow_core PUBLIC src)
 target_compile_options(sideshow_core PRIVATE -Wall -Wextra)
 target_link_libraries(sideshow_core PUBLIC tomlplusplus::tomlplusplus)
+
+if(SIDESHOW_BUILD_PLAYER OR SIDESHOW_BUILD_VIDEO_TESTS)
+    find_package(PkgConfig REQUIRED)
+    find_package(Threads REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat>=59.27 libavcodec>=59.37 libavutil>=57.28 libswscale>=6.7)
+    add_library(sideshow_video STATIC src/video_decoder.cpp src/video_worker.cpp)
+    target_link_libraries(sideshow_video PUBLIC sideshow_core PkgConfig::FFMPEG Threads::Threads)
+    target_compile_options(sideshow_video PRIVATE -Wall -Wextra)
+endif()
 
 if(SIDESHOW_BUILD_PLAYER)
     find_package(SDL2 REQUIRED)
@@ -57,11 +70,15 @@ if(SIDESHOW_BUILD_PLAYER)
     target_compile_definitions(sideshow_fluid PUBLIC ${SIDESHOW_GL_DEFS})
     target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
-    add_library(sideshow_backends STATIC src/fluid_backend.cpp src/milkdrop_backend.cpp
+    add_library(sideshow_backends STATIC src/video_presenter.cpp src/video_backend.cpp src/fluid_backend.cpp src/milkdrop_backend.cpp
         src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp)
     target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
-    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid libprojectM::projectM libprojectM::playlist)
+    target_link_libraries(sideshow_backends PUBLIC sideshow_fluid sideshow_video libprojectM::projectM libprojectM::playlist)
     if(SIDESHOW_BUILD_GL_TESTS)
+        add_executable(sideshow_video_gl_tests tests/test_video_gl.cpp src/video_presenter.cpp src/fluid_gl.cpp)
+        target_compile_options(sideshow_video_gl_tests PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR}/tests/support/video_gl_tracking.h)
+        target_compile_definitions(sideshow_video_gl_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video" ${SIDESHOW_GL_DEFS})
+        target_link_libraries(sideshow_video_gl_tests PRIVATE sideshow_backends sideshow_video SDL2::SDL2 ${SIDESHOW_GL_LIBS})
         add_executable(sideshow_gl_tests tests/test_visual_gl.cpp src/fluid_gl.cpp)
         # Link the instrumented GL ownership boundary in this executable only;
         # the archive's ordinary fluid_gl object is not extracted by the linker.
@@ -92,6 +109,8 @@ if(SIDESHOW_BUILD_TESTS)
 
     enable_testing()
     add_executable(sideshow_tests
+        tests/test_video_catalog.cpp
+        tests/test_video_playback.cpp
         tests/test_visual_controller.cpp
         tests/test_fluid_playback.cpp
         tests/test_fluid_presets.cpp
@@ -107,6 +126,13 @@ if(SIDESHOW_BUILD_TESTS)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
     include(Catch)
     catch_discover_tests(sideshow_tests)
+
+    if(SIDESHOW_BUILD_VIDEO_TESTS)
+        add_executable(sideshow_video_tests tests/test_video_decoder.cpp tests/test_video_worker.cpp)
+        target_compile_definitions(sideshow_video_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video")
+        target_link_libraries(sideshow_video_tests PRIVATE sideshow_video Catch2::Catch2WithMain)
+        catch_discover_tests(sideshow_video_tests)
+    endif()
 
     # Compile the real manager against a test-only projectM C API double, with no GPU SDK.
     add_executable(sideshow_preset_tests
