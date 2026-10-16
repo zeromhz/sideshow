@@ -84,4 +84,13 @@ if(SIDESHOW_BUILD_TESTS)
     list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
     include(Catch)
     catch_discover_tests(sideshow_tests)
+
+    # Compile the real manager against a test-only projectM C API double, with no GPU SDK.
+    add_executable(sideshow_preset_tests
+        tests/test_preset_manager.cpp
+        tests/support/fake_projectm.cpp
+        src/preset_manager.cpp)
+    target_include_directories(sideshow_preset_tests PRIVATE tests/support)
+    target_link_libraries(sideshow_preset_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
+    catch_discover_tests(sideshow_preset_tests)
 endif()

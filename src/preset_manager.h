@@ -32,13 +32,15 @@ public:
     void random();
     bool loadPreset(const std::string& name);  // false if not found, known bad, or fails to load
     void setLocked(bool locked);
-    void tick();  // once per frame: skips past a preset that just failed to load
+    void tick();  // once per frame: handles deferred automatic switches and failure recovery
 
     const std::string& currentPlaylist() const { return playlistName_; }
     const std::string& currentPreset() const { return presetName_; }
 
 private:
+    void advance(bool backwards, bool hardCut);
     void pruneBadPresets();  // removes playlist items the catalog has marked bad
+    static void onSwitchRequested(bool isHardCut, void* userData);
     static void onSwitched(bool isHardCut, unsigned int index, void* userData);
     static void onFailed(const char* presetFilename, const char* message, void* userData);
 
@@ -49,7 +51,10 @@ private:
     std::string presetName_;
     bool lastLoadFailed_ = false;             // set by onFailed, consumed by onSwitched/loadPreset
     std::optional<unsigned int> failedIndex_;  // pending skip in tick(): the failed item's index
-    bool failedItemPresent_ = false;           // false once pruneBadPresets() removed it
+    std::optional<bool> switchRequested_;  // deferred timed/beat switch, preserving hard cut
+    unsigned int position_ = 0;
+    bool positionRemoved_ = false;  // cursor is a gap: next plays its successor
+    bool badPresetsPending_ = false;           // cleanup independent of pending recovery
     int consecutiveFailures_ = 0;
     bool goingBack_ = false;  // prev() in progress: skip failures backwards
     std::mt19937 rng_{std::random_device{}()};

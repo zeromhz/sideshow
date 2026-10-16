@@ -9,9 +9,9 @@
 #include <optional>
 #include <string>
 #include <variant>
-#include <vector>
 
 #include "audio_capture.h"
+#include "audio_feed.h"
 #include "audio_ring.h"
 #include "command.h"
 #include "config.h"
@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
         PlayerStatus status;
         OscServer osc(config.osc.port, config.panelId, commands, status);
 
-        std::vector<float> pcm(projectm_pcm_get_max_samples() * 2);
+        AudioFeed audioFeed(projectm_pcm_get_max_samples());
         const Uint32 frameBudgetMs = 1000 / static_cast<Uint32>(std::max(1, config.display.fps));
         Uint32 lastTicks = SDL_GetTicks();
         Uint32 fpsWindowStart = lastTicks;
@@ -141,16 +141,19 @@ int main(int argc, char** argv) {
 
             // Skip a failed preset first, so it can't override or double an OSC command.
             presets.tick();
-            while (auto command = commands.pop()) applyCommand(*command, presets, renderer, output);
+            commands.processFrame([&](const Command& command) {
+                applyCommand(command, presets, renderer, output);
+            });
 
             const Uint32 now = SDL_GetTicks();
             if (audio) audio->tick(now);
-            size_t n = 0;
-            while ((n = ring.read(pcm.data(), pcm.size())) > 0) {
-                renderer.addPcm(pcm.data(), static_cast<unsigned int>(n / 2));
-            }
+            const float dtSeconds = static_cast<float>(now - lastTicks) / 1000.0f;
+            audioFeed.update(ring, audio && audio->isOpen(), dtSeconds,
+                             [&](const float* pcm, size_t frames) {
+                                 renderer.addPcm(pcm, static_cast<unsigned int>(frames));
+                             });
 
-            output.update(static_cast<float>(now - lastTicks) / 1000.0f);
+            output.update(dtSeconds);
             lastTicks = now;
             renderer.render(output.brightness());
             display.swap();

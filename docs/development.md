@@ -1,0 +1,92 @@
+# Development
+
+Run commands from the repository root. The project requires a C++17 compiler, CMake 3.20+
+and Git. Python 3 runs the OSC tool and its tests without additional packages.
+
+## Core build and tests
+
+The default build excludes the player and needs no GPU, microphone, SDL, or projectM.
+CMake fetches toml++ v3.4.0 and, when tests are enabled, Catch2 v3.7.1 from GitHub, so a
+first configuration needs network access.
+
+```bash
+cmake -S . -B build-core -DSIDESHOW_BUILD_PLAYER=OFF -DSIDESHOW_BUILD_TESTS=ON
+cmake --build build-core --parallel
+ctest --test-dir build-core --output-on-failure
+python3 -m unittest discover -s tools
+```
+
+Use a separate build directory to keep core-only and full-player CMake settings independent.
+Generated `build/`, `build-*/`, and `deps/` directories are ignored by Git.
+
+## macOS player
+
+Install the Xcode command-line tools and Homebrew first. The setup script installs CMake,
+pkg-config, SDL2, and liblo through Homebrew, builds projectM v4.1.7 with its playlist
+library into `deps/install`, and downloads pinned preset/texture packs into `deps`.
+
+```bash
+setup/dev-macos.sh
+cmake -S . -B build -DSIDESHOW_BUILD_PLAYER=ON -DCMAKE_PREFIX_PATH="$PWD/deps/install"
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+./build/sideshow-player --config setup/config.dev.toml
+```
+
+The development config opens a 1280×720 window with panel ID `dev` and 15-second presets.
+Its asset paths are relative to the working directory, so launch from the repository root.
+Allow microphone access if macOS requests it. In another terminal:
+
+```bash
+python3 tools/osc_send.py --host 127.0.0.1 ping
+python3 tools/osc_send.py --host 127.0.0.1 --panel dev next
+```
+
+Prefix the player command with `SIDESHOW_DEBUG=1` to inspect ignored OSC traffic.
+Close the window or use Ctrl+C to stop it.
+
+## Raspberry Pi deployment
+
+Follow the [per-panel setup](../README.md#raspberry-pi-setup-per-panel) on Raspberry Pi OS
+Lite Bookworm, 64-bit. `setup/install.sh` is a machine-provisioning script: it installs
+packages, builds projectM with GLES into `/usr/local`, builds the player with tests disabled,
+installs assets, configures a service account/systemd, and adjusts boot settings and tty1.
+Passing `--panel-id` also changes the hostname and configured panel ID.
+
+| Installed path | Purpose |
+|---|---|
+| `/opt/sideshow/bin/sideshow-player` | Player executable |
+| `/opt/sideshow/build` | Player build directory |
+| `/opt/sideshow/presets` | Playlist directories/symlinks |
+| `/opt/sideshow/textures` | Merged texture files |
+| `/opt/sideshow/packs` | Pinned upstream asset checkouts |
+| `/etc/sideshow/config.toml` | Persistent local configuration |
+| `/etc/systemd/system/sideshow-player.service` | Boot/restart service |
+
+Reinstallation preserves an existing config except an explicitly supplied panel ID.
+Asset fetching rebuilds managed textures and playlist links; keep custom playlists in
+separately named directories under `presets`, and do not edit managed pack checkouts.
+
+## Making changes
+
+Keep independently testable behavior in `sideshow_core`; keep SDL/liblo/projectM integration
+in the player target. Preserve the [thread ownership rules](architecture.md#runtime-and-ownership).
+Add new compiled source/test files explicitly to `CMakeLists.txt`.
+
+For a new OSC command, trace `command.h` → `osc_parse.cpp` → `main.cpp` dispatch and update
+the Python CLI and README command table as appropriate. For configuration changes, keep
+`config.h`, `config.cpp`, example configs, and the [reference](configuration.md) aligned.
+
+The C++ suite covers configuration, output levels, audio buffering and silence fallback,
+bounded command processing, OSC parsing, preset catalog operations, and display mode selection.
+A separate `sideshow_preset_tests` target compiles the real preset manager against a test-only
+projectM API double to exercise failure callbacks, cleanup, navigation, and fallback without
+a GPU or projectM installation. Python tests cover OSC encoding/decoding and CLI value parsing.
+These tests do not exercise GL rendering, real audio devices, liblo networking, the real
+projectM callback integration, or systemd recovery. Use the README's
+hardware smoke checklist for integration changes; a passing unit suite is not a stage
+performance measurement.
+
+Dependency versions live in `CMakeLists.txt`, `setup/build_projectm.sh`, and
+`setup/fetch_presets.sh`. The earlier [design](superpowers/specs/2026-09-22-sideshow-player-design.md)
+and [plan](superpowers/plans/2026-09-22-sideshow-player.md) provide historical rationale.

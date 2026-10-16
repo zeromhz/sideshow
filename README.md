@@ -4,6 +4,16 @@ Autonomous, audio-reactive stage visuals for 6–8 panels, each driven by a Rasp
 running [projectM](https://github.com/projectM-visualizer/projectm) (MilkDrop presets).
 Each Pi listens to its own USB mic, boots straight into visuals, and takes live control over OSC.
 
+## Project documentation
+
+- [Architecture](docs/architecture.md): source map, runtime flow, threading, and recovery behavior.
+- [Development](docs/development.md): prerequisites, builds, tests, and where to make changes.
+- [Configuration reference](docs/configuration.md): defaults, accepted ranges, and runtime overrides.
+
+This README covers installation and live operation. The [original design](docs/superpowers/specs/2026-09-22-sideshow-player-design.md)
+and [implementation plan](docs/superpowers/plans/2026-09-22-sideshow-player.md) preserve the earlier
+planning context; the guides above describe the current implementation.
+
 ## Raspberry Pi setup (per panel)
 
 1. Flash **Raspberry Pi OS Lite (64-bit, Bookworm)** with Raspberry Pi Imager. In its settings, set
@@ -58,6 +68,11 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.
 Ints and floats are interchangeable for toggles and numbers.
+
+Under heavy OSC traffic, pending master/blackout updates keep only their latest value and take
+priority over other commands. The ordinary queue holds 128 commands; additional ordinary
+commands are dropped while it is full. Processing is bounded per frame to keep visuals moving,
+though an individual preset load can still take longer than a frame.
 
 CLI (no dependencies):
 
