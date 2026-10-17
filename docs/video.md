@@ -93,3 +93,11 @@ Before deployment, verify on the device:
 - Command latency while opening large or damaged local clips.
 
 ISF shader mode remains the subsequent feature and is not part of this video implementation.
+
+Decoder resource admission checks both the source pixel count and each axis before
+allocating decoded frame buffers, including mid-stream resolution changes. Probing
+uses demuxer metadata and parsers with internal probe decoders disabled; the selected
+video decoder then runs with the guarded allocator. FFmpeg may log a probe codec
+whitelist warning for this intentional restriction. Files whose dimensions cannot
+be discovered without probe decoding are rejected; normal decoding errors retain
+the current picture as described above.

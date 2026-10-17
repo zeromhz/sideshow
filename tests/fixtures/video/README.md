@@ -16,3 +16,12 @@ ffmpeg -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=64x48:rate=5 -t
 ```
 
 Corrupt is plain text; truncated is the first half of reordered.mp4.
+
+## Decoder allocation limits
+
+Run `python3 tools/generate_video_limit_fixtures.py` to regenerate the synthetic
+H.264 transport streams. Each `*-change.ts` contains ten black 64×64 frames followed
+by one frame at the new size: 4096×2304 (pixel ceiling), 4112×32 or 32×4112 (axis
+ceiling), or 128×64 (valid change). `oversized.ts` starts at 4096×2304 to exercise
+initial probing. No third-party footage is used. These test decoder content
+handling directly; `.ts` is not added to the selectable library extensions.

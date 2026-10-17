@@ -155,6 +155,13 @@ if(SIDESHOW_BUILD_TESTS)
         target_compile_definitions(sideshow_video_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video")
         target_link_libraries(sideshow_video_tests PRIVATE sideshow_video Catch2::Catch2WithMain)
         catch_discover_tests(sideshow_video_tests)
+        # Observe real decoder allocations without adding hooks to the player.
+        add_executable(sideshow_video_limit_tests tests/test_video_limits.cpp src/video_decoder.cpp)
+        target_compile_options(sideshow_video_limit_tests PRIVATE
+            -include ${CMAKE_CURRENT_SOURCE_DIR}/tests/support/video_decode_tracking.h)
+        target_compile_definitions(sideshow_video_limit_tests PRIVATE VIDEO_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/video")
+        target_link_libraries(sideshow_video_limit_tests PRIVATE sideshow_video Catch2::Catch2WithMain)
+        catch_discover_tests(sideshow_video_limit_tests)
     endif()
 
     # Compile the real manager against a test-only projectM C API double, with no GPU SDK.

@@ -38,12 +38,22 @@ int openLocal(const std::filesystem::path& path) {
     }
     return parent;
 }
+constexpr int64_t kMaxSourcePixels = 8847360;
+bool validSourceSize(int width, int height) {
+    return width > 0 && height > 0 && width <= 4096 && height <= 4096 &&
+           int64_t(width) * height <= kMaxSourcePixels;
+}
+int allocateVideoBuffer(AVCodecContext* codec, AVFrame* frame, int flags) {
+    // This callback can run on decoder threads: no exceptions or shared state.
+    if (!validSourceSize(frame->width, frame->height)) return AVERROR(EINVAL);
+    return avcodec_default_get_buffer2(codec, frame, flags);
+}
 bool hdr(AVColorTransferCharacteristic transfer) {
     return transfer == AVCOL_TRC_SMPTE2084 || transfer == AVCOL_TRC_ARIB_STD_B67;
 }
 }
 std::pair<int,int> videoOutputSize(int w,int h) {
-    if(w<=0 || h<=0 || w>4096 || h>4096 || int64_t(w)*h>8847360)
+    if(!validSourceSize(w,h))
         throw std::runtime_error("Video dimensions exceed supported limits");
     const double scale=std::min({1.0, double(w>=h?1920:1080)/w, double(w>=h?1080:1920)/h});
     return {std::max(1,int(w*scale)),std::max(1,int(h*scale))};
@@ -99,6 +109,10 @@ struct VideoDecoder::Impl {
         format->interrupt_callback={interrupt,this}; format->io_open=denyOpen;
         format->probesize=5*1024*1024; format->max_analyze_duration=5*AV_TIME_BASE;
         checked(avformat_open_input(&format,nullptr,nullptr,nullptr),"Open video");
+        // Probe headers/parsers only. Internal probe decoders cannot use our guarded
+        // allocator, and could otherwise allocate oversized video (or audio) frames.
+        format->codec_whitelist = av_strdup("");
+        if (!format->codec_whitelist) throw std::bad_alloc();
         start(); checked(avformat_find_stream_info(format,nullptr),"Probe video");
         for(unsigned i=0;i<format->nb_streams;++i) {
             auto s=format->streams[i];
@@ -114,6 +128,11 @@ struct VideoDecoder::Impl {
         if(!decoder) throw std::runtime_error("Unsupported video codec");
         codec=avcodec_alloc_context3(decoder); if(!codec) throw std::bad_alloc();
         checked(avcodec_parameters_to_context(codec,params),"Configure codec");
+        codec->max_pixels = kMaxSourcePixels;
+        codec->get_buffer2 = allocateVideoBuffer;
+#if LIBAVCODEC_VERSION_MAJOR < 60
+        codec->thread_safe_callbacks = 1;
+#endif
         codec->thread_count=2; checked(avcodec_open2(codec,decoder,nullptr),"Open codec");
         packet=av_packet_alloc(); frame=av_frame_alloc(); if(!packet || !frame) throw std::bad_alloc();
         auto rate=av_guess_frame_rate(format,s,nullptr); timestamps=VideoTimestamps(av_q2d(rate));

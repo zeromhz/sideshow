@@ -88,7 +88,8 @@ void IsfPlayback::navigate(int direction, bool shuffled) {
     // Navigation may try each direct child once; an explicit preset may not.
     candidates_.clear();
     for (size_t n = 0; n < ids.size(); ++n)
-        candidates_.push_back(ids[(index + n) % ids.size()]);
+        candidates_.push_back(ids[direction < 0 && !shuffled
+            ? (index + ids.size() - n) % ids.size() : (index + n) % ids.size()]);
     candidateIndex_ = 0;
 }
 
