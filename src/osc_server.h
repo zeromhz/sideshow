@@ -35,6 +35,7 @@ class OscServer {
 public:
     OscServer(int port, std::string panelId, CommandQueue& queue, const PlayerStatus& status);
     ~OscServer();
+    int port() const;
     OscServer(const OscServer&) = delete;
     OscServer& operator=(const OscServer&) = delete;
 
@@ -43,6 +44,7 @@ private:
                       lo_message message, void* userData);
     static void onError(int number, const char* message, const char* where);
     void replyPong(lo_message message);
+    void handleRequest(const char* types, lo_arg** argv, int argc, lo_message message);
 
     lo_server_thread server_ = nullptr;
     std::string panelId_;

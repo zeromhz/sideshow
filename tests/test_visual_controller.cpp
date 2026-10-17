@@ -69,7 +69,7 @@ TEST_CASE("Pending video receives controls without replacing the active picture"
     v.apply(cmd::VideoEndMode{VideoEnd::Hold});v.apply(cmd::VideoPause{true});v.apply(cmd::VideoRestart{});
     v.apply(cmd::Lock{true});v.resize(640,360);v.render(.1);v.maintenance();
     CHECK(v.mode()==VisualMode::Milkdrop);CHECK(v.statusPreset()==before);
-    CHECK(state->selection.preset=="nested/clip.mp4");CHECK(state->paused);CHECK(state->restarts==1);
+    CHECK(state->selection.preset=="nested/clip.mp4");CHECK(state->paused);CHECK(state->restarts==0);
     CHECK(state->settings.locked);CHECK(state->width==640);
     state->state=PreparationState::Ready;v.maintenance();
     CHECK(v.statusPreset()=="video/nested/clip.mp4");CHECK(live==0);
@@ -143,4 +143,76 @@ TEST_CASE("Configured startup lock holds Fluid until OSC unlock") {
     v.apply(cmd::Lock{false});
     v.render(2);
     CHECK(v.statusPreset()=="fluid/frost");
+}
+
+TEST_CASE("Command acknowledgements distinguish applied settings from accepted requests") {
+    Config config; config.visuals.mode=VisualMode::Fluid;
+    int live=0; TestBackend* current=nullptr; bool fail=false;
+    VisualController controller(config,320,180,[&](VisualMode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+        if(fail) throw std::runtime_error("unavailable");
+        auto backend=std::make_unique<TestBackend>(init,live);current=backend.get();return backend;
+    });
+    auto persistence=controller.apply(cmd::FluidPersistence{4});
+    CHECK(persistence.status=="applied");CHECK(persistence.detail.find("4")!=std::string::npos);
+    CHECK(current->settings.fluidPersistence==4);
+    auto beat=controller.apply(cmd::BeatSensitivity{1.5f});
+    CHECK(beat.status=="applied");CHECK(beat.detail.find("1.5")!=std::string::npos);
+    CHECK(current->settings.beatSensitivity==1.5f);
+    CHECK(controller.apply(cmd::Lock{true}).status=="applied");CHECK(current->settings.locked);
+    CHECK(controller.apply(cmd::Duration{60}).status=="applied");CHECK(current->settings.duration==60);
+    CHECK(controller.apply(cmd::HardCut{true}).status=="applied");CHECK(current->settings.hardcut);
+    CHECK(controller.apply(cmd::Preset{"missing"}).status=="rejected");
+    CHECK(controller.apply(cmd::Playlist{"missing"}).status=="rejected");
+    CHECK(controller.apply(cmd::Preset{"lava"}).status=="applied");
+    auto next=controller.apply(cmd::Next{});
+    CHECK(next.status=="applied");CHECK(next.detail=="preset="+current->selection().preset);
+    CHECK(controller.apply(cmd::Prev{}).status=="applied");
+    CHECK(controller.apply(cmd::Random{}).status=="applied");
+    auto playlist=controller.apply(cmd::Playlist{"default"});
+    CHECK(playlist.status=="applied");CHECK(playlist.detail=="playlist=default");
+    CHECK(controller.apply(cmd::VideoPause{true}).status=="rejected");
+    CHECK(controller.apply(cmd::VideoEndMode{VideoEnd::Hold}).status=="rejected");
+    CHECK(controller.apply(cmd::VideoRestart{}).status=="rejected");
+    CHECK(controller.apply(cmd::IsfParam{"speed",{1.f}}).status=="rejected");
+    CHECK(controller.apply(cmd::IsfEvent{"reset"}).status=="rejected");
+    fail=true;CHECK(controller.apply(cmd::Mode{VisualMode::Milkdrop}).status=="rejected");
+    CHECK(controller.mode()==VisualMode::Fluid);
+    fail=false;CHECK(controller.apply(cmd::Mode{VisualMode::Milkdrop}).status=="applied");
+}
+
+TEST_CASE("Pending mode and preset acknowledgements never claim the new visual is applied") {
+    Config config;int live=0;auto state=std::make_shared<PendingVideoState>();
+    VisualController controller(config,320,180,[&](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
+        if(mode==VisualMode::Video)return std::make_unique<PendingVideoBackend>(init,state);
+        return std::make_unique<TestBackend>(init,live);
+    });
+    auto before=controller.statusPreset();
+    auto mode=controller.apply(cmd::Mode{VisualMode::Video});
+    CHECK(mode.status=="accepted");CHECK(mode.detail.find("loading")!=std::string::npos);
+    CHECK(controller.apply(cmd::Preset{"nested/clip.mp4"}).status=="accepted");
+    CHECK(controller.mode()==VisualMode::Milkdrop);CHECK(controller.statusPreset()==before);
+    CHECK(controller.apply(cmd::VideoRestart{}).status=="rejected");CHECK(state->restarts==0);
+    CHECK(controller.apply(cmd::Next{}).status=="rejected");
+    CHECK(controller.apply(cmd::Prev{}).status=="rejected");
+    CHECK(controller.apply(cmd::Random{}).status=="rejected");
+    CHECK(controller.apply(cmd::VideoPause{true}).status=="accepted");CHECK(state->paused);
+    CHECK(controller.apply(cmd::VideoEndMode{VideoEnd::Hold}).status=="applied");
+    CHECK(state->end==VideoEnd::Hold);
+    state->state=PreparationState::Ready;controller.maintenance();
+    CHECK(controller.apply(cmd::VideoRestart{}).status=="accepted");CHECK(state->restarts==1);
+    CHECK(controller.apply(cmd::Next{}).status=="accepted");
+}
+
+TEST_CASE("ISF navigation is rejected while its initial catalog is still loading") {
+    Config config;auto active=std::make_shared<PendingIsfState>(),pending=std::make_shared<PendingIsfState>();
+    active->state=PreparationState::Ready;
+    VisualController controller(config,320,180,[&](VisualMode mode,const BackendInit& init) {
+        return std::make_unique<PendingIsfBackend>(init,mode==VisualMode::Isf?pending:active,mode==VisualMode::Isf);
+    });
+    REQUIRE(controller.apply(cmd::Mode{VisualMode::Isf}).status=="accepted");
+    CHECK(controller.apply(cmd::Next{}).status=="rejected");
+    CHECK(controller.apply(cmd::Prev{}).status=="rejected");
+    CHECK(controller.apply(cmd::Random{}).status=="rejected");
+    pending->state=PreparationState::Ready;controller.maintenance();
+    CHECK(controller.apply(cmd::Next{}).status=="accepted");
 }

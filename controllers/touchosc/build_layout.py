@@ -77,11 +77,13 @@ def field(parent,name,text,x,y,w,h=35):
 
 def build():
     doc=ET.Element('lexml',version='3')
-    root=node(doc,'GROUP','sideshow',(0,0,1100,820),BG,script=(HERE/'controller.lua').read_text())
+    root=node(doc,'GROUP','sideshow',(0,0,1100,1040),BG,script=(HERE/'controller.lua').read_text())
     c=ET.SubElement(root,'children')
     label(c,'title','SIDESHOW',24,18,300,40,30)
     label(c,'subtitle','STAGE CONTROL  /  OSC',25,57,450,24,12,MUTED)
-    label(c,'network_hint','Connection 1  ·  UDP 9000  ·  Set the Pi host in Connections',500,25,576,26,14,MUTED,3)
+    label(c,'network_hint','Connection 1 · Set host/send port in Connections',450,20,626,22,14,MUTED,3)
+    label(c,'reply_port_title','REPLY PORT (match OSC Receive port)',590,53,320,30,12,MUTED)
+    field(c,'reply_port','9001',920,51,156,32)
     label(c,'target_title','TARGET',24,95,65,34,12,MUTED)
     field(c,'target','all',95,95,165)
     button(c,'all','All',273,95,65,35,'target','all',TEAL)
@@ -155,10 +157,16 @@ def build():
         label(c,'panel_reply_'+str(i+1),'Ping to see panel IDs, presets and FPS.' if i==0 else '',
               24+(i//4)*536,695+(i%4)*18,516,18,12,MUTED)
     label(c,'status','Ready. Configure OSC connection 1, then Ping.',24,779,1052,25,13,TEAL)
+    label(c,'ack_heading','COMMAND REPLIES · latest action · up to 8 panels · accepted = not complete',24,815,1052,24,13,TEAL)
+    for slot in range(1,3):
+        x=24+(slot-1)*536
+        label(c,'ack_title_'+str(slot),'',x,843,516,24,12,TEAL)
+        for row in range(1,9):
+            label(c,f'ack_{slot}_{row}','',x,872+(row-1)*19,516,19,11,MUTED)
     # TouchOSC text controls are display-only; supply a built-in editing keyboard.
-    k=node(c,'GROUP','keyboard',(0,0,1100,820),BG,visible=False,interactive=True)
+    k=node(c,'GROUP','keyboard',(0,0,1100,1040),BG,visible=False,interactive=True)
     kc=ET.SubElement(k,'children')
-    node(kc,'BOX','keyboard_block',(0,0,1100,820),BG,interactive=True)
+    node(kc,'BOX','keyboard_block',(0,0,1100,1040),BG,interactive=True)
     label(kc,'keyboard_title','EDIT',70,145,960,38,20,TEAL)
     label(kc,'keyboard_buffer','',70,200,960,60,23)
     rows=['1234567890-_=+','qwertyuiop[]','asdfghjkl;\'','zxcvbnm,./']
@@ -171,6 +179,17 @@ def build():
     button(kc,'keyboard_cancel','Cancel',70,605,200,46,'key','cancel',MUTED)
     button(kc,'keyboard_done','Done',830,605,200,46,'key','done',TEAL)
     label(kc,'keyboard_note','Edits stay local until you press Load, Set, Send parameter, or Trigger.',70,675,960,30,15,MUTED)
+    # Keep the original landscape aspect ratio after adding acknowledgement rows.
+    # Expand the authored 1100-wide grid, with 12px gutters instead of 24px.
+    for control in doc.iter('node'):
+        frame=next(p.find('value') for p in control.find('properties')
+                   if p.findtext('key')=='frame')
+        x,w=float(frame.findtext('x')),float(frame.findtext('w'))
+        if x==0 and w==1100:
+            frame.find('w').text='1400'
+        else:
+            frame.find('x').text=str(round(12+(x-24)*1376/1052,3))
+            frame.find('w').text=str(round(w*1376/1052,3))
     ET.indent(doc,space='  ')
     xml=ET.tostring(doc,encoding='utf-8',xml_declaration=True)
     (HERE/'Sideshow.tosc').write_bytes(zlib.compress(xml))

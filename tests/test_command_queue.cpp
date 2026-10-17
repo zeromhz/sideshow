@@ -118,3 +118,36 @@ TEST_CASE("CommandQueue yields after a slow preset operation exhausts the time b
     CHECK(processed == 1);
     CHECK(queue.pop().has_value());
 }
+
+TEST_CASE("Acknowledgements follow application and retain applied values") {
+    CommandQueue queue;
+    std::vector<CommandResult> replies;
+    queue.push(cmd::FluidPersistence{4},[&](const CommandResult& r){replies.push_back(r);});
+    CHECK(replies.empty());
+    queue.processAcknowledgedFrame([](const Command& c){
+        return CommandResult{"applied",std::to_string(std::get<cmd::FluidPersistence>(c).value)};
+    });
+    REQUIRE(replies.size()==1);
+    CHECK(replies[0].status=="applied"); CHECK(replies[0].detail=="4.000000");
+}
+TEST_CASE("Acknowledgements report superseded output controls and rejected backlog") {
+    CommandQueue queue;std::vector<std::string> replies;
+    auto reply=[&](const CommandResult& r){replies.push_back(r.status);};
+    queue.push(cmd::Master{.1f},reply);
+    queue.push(cmd::Master{.8f},reply);
+    REQUIRE(replies==std::vector<std::string>{"superseded"});
+    queue.processAcknowledgedFrame([](const Command& c){
+        CHECK(std::get<cmd::Master>(c).value==.8f); return CommandResult{"applied","0.8"};
+    });
+    REQUIRE(replies==std::vector<std::string>{"superseded","applied"});
+    for(int i=0;i<128;++i)queue.push(cmd::Next{});
+    queue.push(cmd::Next{},reply);
+    CHECK(replies.back()=="rejected");
+}
+TEST_CASE("Acknowledgement callbacks execute outside queue mutex") {
+    CommandQueue queue;
+    queue.push(cmd::Blackout{false},[&](const CommandResult&){queue.push(cmd::Next{});});
+    queue.push(cmd::Blackout{true});
+    CHECK(std::holds_alternative<cmd::Blackout>(*queue.pop()));
+    CHECK(std::holds_alternative<cmd::Next>(*queue.pop()));
+}

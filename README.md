@@ -71,6 +71,8 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 `/sideshow/ping` → every panel replies `/sideshow/pong <panel-id> <preset> <fps>` to the sender.
 Ints and floats are interchangeable for toggles and numbers.
 
+The [TouchOSC controller](controllers/touchosc/README.md) uses optional [command acknowledgements](docs/osc-acknowledgements.md) to report applied values, accepted loading requests, and rejected commands per panel. Update both the player and layout to use acknowledgements. Existing direct OSC commands remain supported.
+
 Under heavy OSC traffic, pending master/blackout updates keep only their latest value and take
 priority over other commands. The ordinary queue holds 128 commands; additional ordinary
 commands are dropped while it is full. Processing is bounded per frame to keep visuals moving,

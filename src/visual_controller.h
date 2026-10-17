@@ -7,7 +7,7 @@ class VisualController {
 public:
     VisualController(Config config, int width, int height, BackendFactory factory);
     bool setMode(VisualMode mode);
-    void apply(const Command& command);
+    CommandResult apply(const Command& command);
     void maintenance();
     void addPcm(const float* stereo,size_t frames);
     void render(float dt);
