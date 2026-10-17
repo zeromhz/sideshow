@@ -115,3 +115,22 @@ TEST_CASE("ISF queued and immediate controls share ordered atomic validation", "
         REQUIRE(queued.events().count("reset") == (n == 0 ? 0 : 1));
     }
 }
+
+TEST_CASE("ISF previous skips broken shaders backwards through wraparound", "[isf]") {
+    IsfTree tree;
+    for (auto id : {"a.fs", "b.fs", "c.fs", "d.fs"}) tree.file(id, "/*{}*/");
+    IsfPlayback playback({".", "c.fs"}, PlaybackSettings{}, 1);
+    playback.setCatalog(std::make_shared<IsfCatalog>(IsfCatalog::scan(tree.root, {})));
+    auto first = playback.takeRequest();
+    REQUIRE(first);
+    REQUIRE(playback.commit(first->generation, first->id));
+    playback.navigate(-1, false);
+    for (auto expected : {"b.fs", "a.fs", "d.fs", "c.fs"}) {
+        auto request = playback.takeRequest();
+        REQUIRE(request);
+        REQUIRE(request->id == expected);
+        playback.failed(request->generation, "broken");
+    }
+    REQUIRE_FALSE(playback.takeRequest());
+    REQUIRE_FALSE(playback.pending());
+}

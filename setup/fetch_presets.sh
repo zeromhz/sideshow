@@ -72,18 +72,26 @@ if [[ -d "$DEST/presets" ]]; then
     done < <(find "$DEST/presets" -mindepth 1 -maxdepth 1 -type l -print0)
 fi
 
-ln -sfn ../packs/projectM-presets-rpi5/presets "$DEST/presets/default"
+# Managed links were removed above. Preserve all remaining operator-owned paths,
+# including custom symlinks and files; never let ln descend into a directory.
+link_playlist() {
+    local target="$1" destination="$2"
+    if [[ -e "$destination" || -L "$destination" ]]; then return; fi
+    ln -s "$target" "$destination"
+}
+
+link_playlist ../packs/projectM-presets-rpi5/presets "$DEST/presets/default"
 
 shopt -s nullglob
 for category in "$DEST/packs/projectM-presets-rpi5/presets/creamofthecrop"/*/; do
     name="$(basename "$category")"
     [[ "$name" == "! Transition" ]] && continue
     playlist="$(echo "$name" | tr '[:upper:] ' '[:lower:]-')"
-    ln -sfn "../packs/projectM-presets-rpi5/presets/creamofthecrop/$name" "$DEST/presets/$playlist"
+    link_playlist "../packs/projectM-presets-rpi5/presets/creamofthecrop/$name" "$DEST/presets/$playlist"
 done
 
-ln -sfn ../packs/projectM-presets-rpi5/presets/isoscelesmashup "$DEST/presets/isosceles"
-ln -sfn ../packs/projectM-presets-rpi5/presets/BLTC "$DEST/presets/bltc"
-ln -sfn ../packs/projectM-presets-rpi5/presets/EnD "$DEST/presets/en-d"
+link_playlist ../packs/projectM-presets-rpi5/presets/isoscelesmashup "$DEST/presets/isosceles"
+link_playlist ../packs/projectM-presets-rpi5/presets/BLTC "$DEST/presets/bltc"
+link_playlist ../packs/projectM-presets-rpi5/presets/EnD "$DEST/presets/en-d"
 
 echo "Playlists in $DEST/presets: $(ls "$DEST/presets" | tr '\n' ' ')"
