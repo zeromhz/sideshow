@@ -85,6 +85,8 @@ std::optional<Command> parseOscMessage(const std::string& panelId, const std::st
         if (auto f = asFloat(arg)) return cmd::Master{std::clamp(*f, 0.0f, 1.0f)};
     } else if (name == "duration") {
         if (auto f = asFloat(arg)) return cmd::Duration{std::clamp(*f, 1.0f, 3600.0f)};
+    } else if (name == "fluid_persistence") {
+        if (auto f = asFloat(arg); f && *f >= 1.0f && *f <= 10.0f) return cmd::FluidPersistence{*f};
     } else if (name == "beat_sensitivity") {
         if (auto f = asFloat(arg)) return cmd::BeatSensitivity{std::clamp(*f, 0.0f, 2.0f)};
     } else if (name == "playlist") {

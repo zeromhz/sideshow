@@ -84,6 +84,20 @@ int main() {
         bool zeroSizeFailed=false;
         try{sideshow::FluidRenderer zeroSize(0,0,config);}catch(const std::exception&){zeroSizeFailed=true;}
         require(zeroSizeFailed,"Zero-size startup created an unusable renderer");
+        // Equal simulation time and identical splats: persistence changes only fading.
+        auto dyeEnergy = [&](float persistence) {
+            sideshow::FluidRenderer r(320,180,config);
+            auto p=*sideshow::findFluidPreset("lava");
+            p.bloom=false;p.sunrays=false;p.shading=false;
+            r.render(1.0f/60,p,{{.5f,.5f,0,0,{.2f,0,0}}},persistence);
+            for(int frame=0;frame<120;++frame) r.render(1.0f/60,p,{},persistence);
+            std::vector<unsigned char> pixels(320*180*4);
+            glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
+            size_t energy=0;for(size_t i=0;i<pixels.size();i+=4)energy+=pixels[i];
+            return energy;
+        };
+        const auto normal=dyeEnergy(1), lingering=dyeEnergy(4);
+        require(normal>0 && lingering>normal*1.3,"Persistence did not prolong visible dye");
         sideshow::FluidRenderer renderer(320,180,config);
         sideshow::FluidMotion motion(7);
         for(const auto& p:sideshow::fluidPresets()) {

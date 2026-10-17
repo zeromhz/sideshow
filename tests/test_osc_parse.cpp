@@ -118,3 +118,13 @@ TEST_CASE("Video commands validate their exact OSC payloads") {
     CHECK(parseOscMessage("dev","/sideshow/all/video_restart",{}));
     CHECK_FALSE(parseOscMessage("dev","/sideshow/all/video_restart",{int32_t(1)}));
 }
+
+TEST_CASE("OSC: fluid persistence accepts only finite values in its supported range") {
+    CHECK(parse("/sideshow/all/fluid_persistence", {1.0f}));
+    CHECK(parse("/sideshow/panel-03/fluid_persistence", {10.0f}));
+    CHECK_FALSE(parse("/sideshow/all/fluid_persistence", {0.0f}));
+    CHECK_FALSE(parse("/sideshow/all/fluid_persistence", {11.0f}));
+    CHECK_FALSE(parse("/sideshow/all/fluid_persistence", {std::numeric_limits<float>::infinity()}));
+    CHECK_FALSE(parse("/sideshow/all/fluid_persistence", {std::string("4")}));
+    CHECK_FALSE(parse("/sideshow/all/fluid_persistence", {4.0f, 2.0f}));
+}

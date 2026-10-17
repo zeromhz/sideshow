@@ -50,7 +50,8 @@ alone does not change the machine hostname.
 | `presets.soft_cut_duration` | `3.0` | 0–60 seconds of blending |
 | `presets.hardcut_enabled` | `false` | Boolean; enables beat-triggered hard cuts |
 | `presets.beat_sensitivity` | `1.0` | 0–2 |
-| `presets.shuffle` | `true` | Boolean; shuffled playlist playback |
+| `presets.shuffle` | `true` | Boolean; random order when true, sequential when false |
+| `presets.locked` | `false` | Boolean; start with automatic preset rotation locked; OSC Unlock resumes |
 
 Nonempty paths are accepted without checking existence during config parsing. The catalog
 scans at startup; restart after adding presets or playlists.
@@ -78,6 +79,7 @@ preset = "light-show"
 simulation_resolution = 128 # integer 32–256, shorter dimension
 dye_resolution = 512       # integer 128–1024, shorter dimension
 ambient_interval = 2.5      # 0.1–60 seconds
+persistence = 1.0           # 1–10; higher values prolong dye fading
 ```
 
 Quality settings are fixed for the run. Targets preserve drawable aspect ratio, independently of HDMI resolution. Invalid values warn and use defaults. Higher quality requires more GPU memory and time; the defaults are a starting point for Pi benchmarking.
@@ -101,3 +103,7 @@ Set `[visuals] mode = "isf"` for ISF startup. `[isf]` accepts `root` (default
 invalid values warn and retain defaults. Portrait swaps the caps. Development
 setup uses `deps/isf` and `examples/plasma.fs`. Restart after config or catalog
 changes. See [ISF controls, defaults and limits](isf.md).
+
+Fluid persistence scales each style’s dye lifetime without changing its motion, splash timing, preset rotation, or rendering frequency. `1` preserves the original look; `4` gives approximately four times longer fading. OSC `/sideshow/<panel-id-or-all>/fluid_persistence` accepts one finite number from 1 to 10; invalid values are ignored. Runtime changes survive style/mode switches but reset to the TOML value on restart.
+
+To boot on a fixed Fluid style, set `locked = true` in the existing `[presets]` section and select `[fluid] preset`. The animation continues and manual preset selection still works. Lock persists across mode changes; TouchOSC Lock/Unlock overrides it until restart. Config changes require restarting the player.

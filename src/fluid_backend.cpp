@@ -8,6 +8,6 @@ void FluidBackend::render(float dt) {
     playback_.update(dt);
     auto splats=seed_?motion_.seed(playback_.current()):motion_.update(dt,settings_.beatSensitivity,ambientInterval_,playback_.current());
     seed_=false;
-    renderer_.render(dt,playback_.current(),splats);
+    renderer_.render(dt,playback_.current(),splats,settings_.fluidPersistence);
 }
 }

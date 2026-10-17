@@ -5,8 +5,8 @@
 namespace sideshow {
 VisualController::VisualController(Config config,int width,int height,BackendFactory factory)
     : config_(std::move(config)), width_(width),height_(height),factory_(std::move(factory)) {
-    settings_ = {config_.presets.duration,config_.presets.shuffle,false,
-                 config_.presets.hardcutEnabled,config_.presets.beatSensitivity};
+    settings_ = {config_.presets.duration,config_.presets.shuffle,config_.presets.locked,
+                 config_.presets.hardcutEnabled,config_.presets.beatSensitivity,config_.fluid.persistence};
     saved_[0] = {config_.presets.playlist,""};
     saved_[1] = {"default",config_.fluid.preset};
     saved_[2] = {".",config_.video.preset};
@@ -111,6 +111,8 @@ void VisualController::apply(const Command& command) {
             settings_.duration=c.seconds;updateSettings();
         } else if constexpr(std::is_same_v<T,cmd::HardCut>) {
             settings_.hardcut=c.on;updateSettings();
+        } else if constexpr(std::is_same_v<T,cmd::FluidPersistence>) {
+            settings_.fluidPersistence=c.value;updateSettings();
         } else if constexpr(std::is_same_v<T,cmd::BeatSensitivity>) {
             settings_.beatSensitivity=c.value;updateSettings();
         }

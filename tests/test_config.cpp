@@ -158,3 +158,24 @@ TEST_CASE("ISF configuration validates mode library and render bounds","[isf]") 
  CHECK(r.warnings.empty());CHECK(r.config.visuals.mode==sideshow::VisualMode::Isf);CHECK(r.config.isf.maxWidth==640);CHECK(r.config.isf.preset=="nested/a.fs");
  auto bad=sideshow::parseConfig("[isf]\nmax_width=4097\nmax_height=0\npreset='../a.fs'\n");CHECK(bad.warnings.size()==3);CHECK(bad.config.isf.maxWidth==1280);
 }
+
+TEST_CASE("Config: fluid persistence defaults and rejects unsafe multipliers") {
+    CHECK(parseConfig("").config.fluid.persistence == 1.0f);
+    CHECK(parseConfig("[fluid]\npersistence = 4.0").config.fluid.persistence == 4.0f);
+    for (const auto* value : {"0", "-1", "11", "nan", "inf", "'slow'"}) {
+        auto r = parseConfig(std::string("[fluid]\npersistence = ") + value);
+        CHECK(r.config.fluid.persistence == 1.0f);
+        CHECK(hasWarningContaining(r, "fluid.persistence"));
+    }
+}
+
+TEST_CASE("Config: startup lock is opt-in and requires a boolean") {
+    CHECK_FALSE(parseConfig("").config.presets.locked);
+    CHECK(parseConfig("[presets]\nlocked = true").config.presets.locked);
+    CHECK_FALSE(parseConfig("[presets]\nlocked = false").config.presets.locked);
+    for (const auto* value : {"1", "'true'"}) {
+        auto r=parseConfig(std::string("[presets]\nlocked = ")+value);
+        CHECK_FALSE(r.config.presets.locked);
+        CHECK(hasWarningContaining(r,"presets.locked"));
+    }
+}
