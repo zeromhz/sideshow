@@ -9,6 +9,7 @@ struct PlaybackSettings {
     double duration = 30.0;
     bool shuffle = true, locked = false, hardcut = false;
     float beatSensitivity = 1.0f;
+    float fluidPersistence = 1.0f;
 };
 struct VisualSelection { std::string playlist, preset; };
 struct BackendInit { Config config; PlaybackSettings playback; VisualSelection selection; int width, height; VideoEnd videoEnd=VideoEnd::Loop; };

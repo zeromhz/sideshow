@@ -30,6 +30,7 @@ ARG_TYPES = {
     "master": float,
     "duration": float,
     "beat_sensitivity": float,
+    "fluid_persistence": float,
     "mode": str,
     "playlist": str,
     "preset": str,

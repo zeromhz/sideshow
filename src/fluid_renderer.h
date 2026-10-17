@@ -12,7 +12,7 @@ public:
     ~FluidRenderer();
     FluidRenderer(const FluidRenderer&)=delete;FluidRenderer& operator=(const FluidRenderer&)=delete;
     void resize(int width,int height);
-    void render(float dt,const FluidPreset& preset,const std::vector<FluidSplat>& splats);
+    void render(float dt,const FluidPreset& preset,const std::vector<FluidSplat>& splats,float persistence=1.0f);
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

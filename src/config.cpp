@@ -96,6 +96,10 @@ ConfigResult parseConfig(std::string_view tomlText) {
     readKey(root, "presets", "beat_sensitivity", c.presets.beatSensitivity,
             [](float v) { return v >= 0.0f && v <= 2.0f; }, w);  // projectM clamps to 0..2
     readKey(root, "presets", "shuffle", c.presets.shuffle, any, w);
+    if (auto locked = root["presets"]["locked"]; locked && !locked.is_boolean())
+        w.push_back("presets.locked: expected boolean, using default");
+    else
+        readKey(root, "presets", "locked", c.presets.locked, any, w);
 
     readKey(root, "output", "master_default", c.output.masterDefault,
             [](float v) { return v >= 0.0f && v <= 1.0f; }, w);
@@ -125,6 +129,8 @@ ConfigResult parseConfig(std::string_view tomlText) {
     c.visuals.mode = *parseVisualMode(mode);
     readKey(root, "fluid", "preset", c.fluid.preset,
             [](const std::string& v) { return findFluidPreset(v) != nullptr; }, w);
+    readKey(root, "fluid", "persistence", c.fluid.persistence,
+            [](float v) { return v >= 1.0f && v <= 10.0f; }, w);
     auto resolution = [&](const char* key, int& out, int low, int high) {
         const auto node = root["fluid"][key];
         if (node && !node.is_integer()) {

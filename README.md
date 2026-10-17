@@ -64,6 +64,7 @@ UDP port 9000. Address one panel as `/sideshow/<panel-id>/<command>` or all pane
 | `master` | float 0–1 | Output brightness (smoothed, curved) |
 | `duration` | float s | Seconds per preset (1–3600) |
 | `beat_sensitivity` | float | 0–2 |
+| `fluid_persistence` | float 1–10 | Dye lifetime multiplier (Fluid only); 1 = normal |
 | `hardcut` | int 0/1 | Beat-triggered hard cuts (MilkDrop only) |
 | `mode` | string | `milkdrop`, `fluid`, `video`, or `isf`; switch when ready |
 
@@ -155,6 +156,8 @@ python3 tools/osc_send.py --panel panel-03 mode milkdrop
 Available fluid presets: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `overhead`. Display names are also accepted, case-insensitively. Overhead inverts the output for a light background.
 
 Each panel runs one mode. Switching commits when the candidate is ready and remembers each mode's last selection for this process; returning restarts its animation. Brightness, blackout, duration, lock, and beat sensitivity remain in effect. Fluid supports the built-in `default` playlist only. Preset changes update the ongoing field, so old dye dissipates into the new palette. `hardcut` affects MilkDrop only.
+
+Use `fluid_persistence 4` for approximately four times longer dye fading without slowing motion or reducing frame rate. It persists across styles and mode switches for this process. Set `[fluid] persistence = 4.0` for the startup default; OSC changes do not rewrite the config. Higher values accumulate more color. The [TouchOSC controller](controllers/touchosc/README.md) includes a live persistence slider.
 
 MilkDrop remains the default. See [configuration](docs/configuration.md#fluid-settings) for startup mode and quality settings, and [development](docs/development.md#fluid-rendering-validation) for validation limits.
 

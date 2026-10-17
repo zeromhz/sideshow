@@ -29,13 +29,14 @@ struct Preset { std::string name; };
 struct Blackout { bool on; };
 struct Master { float value; };
 struct Duration { float seconds; };
+struct FluidPersistence { float value; };
 struct BeatSensitivity { float value; };
 struct HardCut { bool on; };
 }  // namespace cmd
 
 using Command = std::variant<cmd::IsfParam, cmd::IsfEvent, cmd::Mode, cmd::Next, cmd::Prev, cmd::Random, cmd::Lock, cmd::Playlist,
                              cmd::Preset, cmd::Blackout, cmd::Master, cmd::Duration,
-                             cmd::BeatSensitivity, cmd::HardCut, cmd::VideoEndMode, cmd::VideoPause, cmd::VideoRestart>;
+                             cmd::FluidPersistence, cmd::BeatSensitivity, cmd::HardCut, cmd::VideoEndMode, cmd::VideoPause, cmd::VideoRestart>;
 
 // Bounded multi-producer queue. Blackout and master each have a reserved,
 // latest-value slot so navigation overload cannot discard output controls.

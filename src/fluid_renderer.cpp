@@ -94,7 +94,7 @@ struct FluidRenderer::Impl {
     void draw(const Target& dest) {
         glBindFramebuffer(GL_FRAMEBUFFER,dest.fbo);glViewport(0,0,dest.width,dest.height);glDrawArrays(GL_TRIANGLES,0,3);
     }
-    void render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& splats) {
+    void render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& splats,float persistence) {
         auto& f=*fields;
         dt=std::isfinite(dt)?std::clamp(dt,0.0f,1.0f/60):0;
         const float aspect=static_cast<float>(width)/height;
@@ -120,7 +120,7 @@ struct FluidRenderer::Impl {
         begin(advection,f.velocity.read);advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.velocity.read.texture,0);
         advection.two("dyeTexelSize",1.0f/f.velocity.read.width,1.0f/f.velocity.read.height);advection.one("dt",dt);advection.one("dissipation",p.velocityDissipation);draw(f.velocity.write);f.velocity.swap();
         advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.dye.read.texture,1);
-        advection.two("dyeTexelSize",1.0f/f.dye.read.width,1.0f/f.dye.read.height);advection.one("dissipation",p.densityDissipation);draw(f.dye.write);f.dye.swap();
+        advection.two("dyeTexelSize",1.0f/f.dye.read.width,1.0f/f.dye.read.height);advection.one("dissipation",p.densityDissipation / (std::isfinite(persistence) ? std::clamp(persistence,1.0f,10.0f) : 1.0f));draw(f.dye.write);f.dye.swap();
         if(p.bloom) {
             begin(prefilter,f.dye.read);prefilter.texture("uTexture",f.dye.read.texture,0);
             float knee=p.bloomThreshold*p.bloomSoftKnee+.0001f;
@@ -158,5 +158,5 @@ FluidRenderer::FluidRenderer(int w,int h,const Config::Fluid& c,fluid_gl::Capabi
 }
 FluidRenderer::~FluidRenderer()=default;
 void FluidRenderer::resize(int w,int h){impl_->resize(w,h);}
-void FluidRenderer::render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& s){impl_->render(dt,p,s);}
+void FluidRenderer::render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& s,float persistence){impl_->render(dt,p,s,persistence);}
 }

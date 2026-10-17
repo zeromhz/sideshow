@@ -38,6 +38,7 @@ struct Config {
         bool hardcutEnabled = false;
         float beatSensitivity = 1.0f;
         bool shuffle = true;
+        bool locked = false;
     } presets;
 
     struct Visuals { VisualMode mode = VisualMode::Milkdrop; } visuals;
@@ -46,6 +47,7 @@ struct Config {
         int simulationResolution = 128;
         int dyeResolution = 512;
         float ambientInterval = 2.5f;
+        float persistence = 1.0f;
     } fluid;
 
     struct Isf {

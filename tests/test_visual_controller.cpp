@@ -109,3 +109,38 @@ TEST_CASE("ISF startup prepares over MilkDrop fallback","[isf]") {
  VisualController v(c,320,180,[&](VisualMode m,const BackendInit& i){created.push_back(m);auto s=std::make_shared<PendingIsfState>();s->state=m==VisualMode::Isf?PreparationState::Pending:PreparationState::Ready;return std::make_unique<PendingIsfBackend>(i,s,m==VisualMode::Isf);});
  CHECK(created==std::vector<VisualMode>{VisualMode::Milkdrop,VisualMode::Isf});CHECK(v.mode()==VisualMode::Milkdrop);v.setMode(VisualMode::Milkdrop);v.maintenance();CHECK(v.mode()==VisualMode::Milkdrop);
 }
+
+TEST_CASE("Fluid persistence starts from config and survives preset and mode changes") {
+    Config c; c.visuals.mode=VisualMode::Fluid; c.fluid.persistence=2;
+    int live=0; TestBackend* current=nullptr;
+    VisualController v(c,320,180,[&](VisualMode,const BackendInit& init) {
+        auto b=std::make_unique<TestBackend>(init,live); current=b.get(); return b;
+    });
+    CHECK(current->settings.fluidPersistence==2);
+    v.apply(cmd::FluidPersistence{4});
+    v.apply(cmd::Preset{"lava"});
+    CHECK(current->settings.fluidPersistence==4);
+    REQUIRE(v.setMode(VisualMode::Milkdrop));
+    REQUIRE(v.setMode(VisualMode::Fluid));
+    CHECK(current->settings.fluidPersistence==4);
+}
+
+TEST_CASE("Configured startup lock holds Fluid until OSC unlock") {
+    auto config = parseConfig("[visuals]\nmode = 'fluid'\n[fluid]\npreset = 'lava'\n[presets]\nlocked = true\nshuffle = false\nduration = 1.0\n").config;
+    int live=0;
+    VisualController v(config,320,180,[&](VisualMode,const BackendInit& init) {
+        return std::make_unique<TestBackend>(init,live);
+    });
+    v.render(10);
+    CHECK(v.statusPreset()=="fluid/lava");
+    v.apply(cmd::Preset{"ink"});
+    v.render(10);
+    CHECK(v.statusPreset()=="fluid/ink");
+    REQUIRE(v.setMode(VisualMode::Milkdrop));
+    REQUIRE(v.setMode(VisualMode::Fluid));
+    v.render(10);
+    CHECK(v.statusPreset()=="fluid/ink");
+    v.apply(cmd::Lock{false});
+    v.render(2);
+    CHECK(v.statusPreset()=="fluid/frost");
+}

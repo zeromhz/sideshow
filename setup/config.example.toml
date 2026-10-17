@@ -27,6 +27,7 @@ soft_cut_duration = 3.0        # blend time between presets
 hardcut_enabled = false        # beat-triggered abrupt cuts
 beat_sensitivity = 1.0         # 0..2
 shuffle = true
+locked = false                # true holds the startup preset; OSC Unlock resumes rotation
 
 [output]
 master_default = 1.0           # brightness at boot, before any OSC master arrives
@@ -41,6 +42,7 @@ preset = "light-show"
 simulation_resolution = 128
 dye_resolution = 512
 ambient_interval = 2.5
+persistence = 1.0              # 1..10: dye lifetime multiplier; motion/FPS unchanged
 
 [video]
 root = "/opt/sideshow/videos"
