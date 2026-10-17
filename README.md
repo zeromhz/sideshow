@@ -153,7 +153,7 @@ python3 tools/osc_send.py preset lava
 python3 tools/osc_send.py --panel panel-03 mode milkdrop
 ```
 
-Available fluid presets: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `overhead`. Display names are also accepted, case-insensitively. Overhead inverts the output for a light background.
+Available fluid presets: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `pompeii`, `overhead`. Pompeii adds an electric-blue/violet/magenta palette sampled from the Beyond Pompeii banner, with gentle motion and restrained bloom. Display names are also accepted, case-insensitively. Overhead inverts the output for a light background.
 
 Each panel runs one mode. Switching commits when the candidate is ready and remembers each mode's last selection for this process; returning restarts its animation. Brightness, blackout, duration, lock, and beat sensitivity remain in effect. Fluid supports the built-in `default` playlist only. Preset changes update the ongoing field, so old dye dissipates into the new palette. `hardcut` affects MilkDrop only.
 
