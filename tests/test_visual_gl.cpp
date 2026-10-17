@@ -117,6 +117,23 @@ int main() {
             }
             std::cout << p.slug << " rendered\n";
         }
+        {
+            sideshow::FluidRenderer preview(320,180,config);
+            sideshow::FluidMotion seeded(42);
+            const auto& p=*sideshow::findFluidPreset("pompeii");
+            preview.render(1.0f/60,p,seeded.seed(p),4);
+            for(int frame=0;frame<120;++frame)
+                preview.render(1.0f/60,p,seeded.update(1.0f/60,0,2.5f,p),4);
+            std::vector<unsigned char> pixels(320*180*4);
+            glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());
+            size_t red=0,green=0,blue=0;
+            for(size_t i=0;i<pixels.size();i+=4){red+=pixels[i];green+=pixels[i+1];blue+=pixels[i+2];}
+            require(red>1000 && blue>1000 && green<(red+blue)/20,"Pompeii lost its duotone palette");
+            std::ofstream image("/tmp/sideshow-fluid-pompeii.ppm",std::ios::binary);
+            image << "P6\n320 180\n255\n";
+            for(int y=179;y>=0;--y)for(int x=0;x<320;++x)
+                image.write(reinterpret_cast<const char*>(pixels.data()+(y*320+x)*4),3);
+        }
         bool resizeFailed=false;
         try{renderer.resize(2147483647,1);}catch(const std::exception&){resizeFailed=true;}
         require(resizeFailed,"Oversized target was accepted");

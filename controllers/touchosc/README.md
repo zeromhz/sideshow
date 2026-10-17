@@ -14,7 +14,7 @@ The Pi must run the player version containing this command. Older builds ignore 
 
 ## Other controls
 
-Fluid shortcuts select Fluid mode and a style. Lock stops automatic style rotation; it does not freeze animation. Set `locked = true` in the Pi config’s `[presets]` section to start locked; Unlock resumes rotation. Video Pause affects video only. Blackout hides output while rendering continues. ISF controls require an active shader and its input names; select the correct numeric type, especially integer/bool.
+Fluid shortcuts select Fluid mode and a style, including Pompeii (electric blue, violet, and magenta). Lock stops automatic style rotation; it does not freeze animation. Set `locked = true` in the Pi config’s `[presets]` section to start locked; Unlock resumes rotation. Video Pause affects video only. Blackout hides output while rendering continues. ISF controls require an active shader and its input names; select the correct numeric type, especially integer/bool.
 
 Click a text field to open the built-in onscreen keyboard; Done saves locally, then Load/Set/Send applies it. Physical keyboard entry is not implemented. Nothing is sent merely by opening the layout. Sliders send while moved, at most about 29 messages per second each.
 

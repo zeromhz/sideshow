@@ -84,7 +84,7 @@ persistence = 1.0           # 1–10; higher values prolong dye fading
 
 Quality settings are fixed for the run. Targets preserve drawable aspect ratio, independently of HDMI resolution. Invalid values warn and use defaults. Higher quality requires more GPU memory and time; the defaults are a starting point for Pi benchmarking.
 
-Built-in slugs: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `overhead`. `preset` also accepts case-insensitive display names. Fluid has only the `default` playlist; unknown playlists or presets leave the selection unchanged. `presets.duration`, `presets.shuffle`, and `presets.beat_sensitivity` initialize MilkDrop and Fluid.
+Built-in slugs: `light-show`, `lava`, `aurora`, `nebula`, `ember`, `neon`, `oil-slick`, `ink`, `frost`, `wild`, `pompeii`, `overhead`. `preset` also accepts case-insensitive display names. Fluid has only the `default` playlist; unknown playlists or presets leave the selection unchanged. `presets.duration`, `presets.shuffle`, and `presets.beat_sensitivity` initialize MilkDrop and Fluid.
 
 OSC `mode fluid` / `mode milkdrop` switches modes at a frame boundary. The last preset and playlist of each mode are remembered until exit; animation restarts when returning. These changes do not rewrite TOML. Duration, lock, beat sensitivity, master, and blackout are shared. Hardcut is retained for MilkDrop only. Fluid preset changes affect the ongoing field without a full-image crossfade.
 

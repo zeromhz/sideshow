@@ -13,6 +13,8 @@ const std::vector<FluidPreset>& fluidPresets() {
         {"ink", "Ink", FluidPalette::Mono, {}, 210.0f, 10.0f, 8.0f, 5500.0f, 0.22f, 1.2f, 0.6f, 0.8f, 20, false, true, false, false, false, 0.8f, 0.6f, 0.7f, 1.0f},
         {"frost", "Frost", FluidPalette::Custom, {{234/255.0f, 255/255.0f, 255/255.0f}, {168/255.0f, 230/255.0f, 255/255.0f}, {201/255.0f, 240/255.0f, 255/255.0f}, {127/255.0f, 212/255.0f, 255/255.0f}}, 0.0f, 3.0f, 6.0f, 3500.0f, 0.5f, 0.6f, 0.45f, 0.8f, 20, true, true, true, true, false, 0.9f, 0.6f, 0.95f, 0.8f},
         {"wild", "Wild", FluidPalette::Spectrum, {}, 0.0f, 25.0f, 50.0f, 11000.0f, 0.2f, 0.1f, 1.4f, 0.8f, 20, true, true, true, true, false, 1.5f, 0.5f, 0.6f, 1.0f},
+        // Palette sampled from the user's Beyond Pompeii duotone banner.
+        {"pompeii", "Pompeii", FluidPalette::Custom, {{34/255.0f, 0/255.0f, 241/255.0f}, {81/255.0f, 0/255.0f, 223/255.0f}, {134/255.0f, 1/255.0f, 202/255.0f}, {176/255.0f, 1/255.0f, 185/255.0f}, {216/255.0f, 0/255.0f, 169/255.0f}}, 0.0f, 4.0f, 12.0f, 4500.0f, 0.45f, 0.7f, 0.35f, 0.8f, 20, true, true, true, false, false, 0.6f, 0.6f, 0.8f, 1.0f},
         {"overhead", "Overhead", FluidPalette::Custom, {{255/255.0f, 122/255.0f, 0/255.0f}, {255/255.0f, 42/255.0f, 109/255.0f}, {122/255.0f, 60/255.0f, 255/255.0f}, {31/255.0f, 182/255.0f, 255/255.0f}, {35/255.0f, 209/255.0f, 139/255.0f}}, 0.0f, 6.0f, 16.0f, 4800.0f, 0.42f, 0.5f, 0.5f, 0.8f, 20, true, true, false, false, true, 0.8f, 0.6f, 0.7f, 1.0f}
     };
     return presets;

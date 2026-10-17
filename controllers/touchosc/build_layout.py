@@ -149,8 +149,8 @@ def build():
     for i,(title,act,arg) in enumerate([('Pause','int',['video_pause',1]),('Play','int',['video_pause',0]),('Restart','send','video_restart'),('Loop','string',['video_end','loop']),('Hold','string',['video_end','hold']),('Next at end','string',['video_end','next'])]):
         button(c,'video_'+str(i),title,105+i*110,606,102,32,act,arg,size=13)
     label(c,'fluid_title','FLUID',24,653,78,25,13,TEAL)
-    presets=['light-show','lava','aurora','nebula','ember','neon','oil-slick','ink','frost','wild','overhead']
-    for i,p in enumerate(presets): button(c,'fluid_'+p,p.replace('-',' ').title(),105+i*89,651,82,32,'fluid',p,size=11)
+    presets=['light-show','lava','aurora','nebula','ember','neon','oil-slick','ink','frost','wild','pompeii','overhead']
+    for i,p in enumerate(presets): button(c,'fluid_'+p,p.replace('-',' ').title(),105+i*81,651,75,32,'fluid',p,size=11)
     for i in range(8):
         label(c,'panel_reply_'+str(i+1),'Ping to see panel IDs, presets and FPS.' if i==0 else '',
               24+(i//4)*536,695+(i%4)*18,516,18,12,MUTED)

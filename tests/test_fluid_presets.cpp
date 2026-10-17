@@ -3,7 +3,7 @@
 #include "config.h"
 using namespace sideshow;
 TEST_CASE("Fluid presets resolve names and isolate palettes and effects") {
-    REQUIRE(fluidPresets().size() == 11);
+    REQUIRE(fluidPresets().size() == 12);
     REQUIRE(findFluidPreset("Overhead"));
     CHECK(findFluidPreset("Overhead")->ink);
     CHECK_FALSE(findFluidPreset("LIGHT SHOW")->ink);
@@ -40,4 +40,24 @@ TEST_CASE("Fluid configuration defaults and validated overrides") {
     }
     CHECK_FALSE(parseConfig("[visuals]\nmode='browser'").warnings.empty());
     CHECK_FALSE(parseConfig("[fluid]\npreset='../foo'").warnings.empty());
+}
+
+#include "fluid_motion.h"
+TEST_CASE("Pompeii resolves from config and emits only blue to magenta dye") {
+    auto config=parseConfig("[visuals]\nmode='fluid'\n[fluid]\npreset='pompeii'");
+    REQUIRE(config.warnings.empty());
+    CHECK(config.config.fluid.preset=="pompeii");
+    auto* preset=findFluidPreset("POMPEII");
+    REQUIRE(preset);
+    FluidMotion motion(7);
+    bool blue=false, pink=false;
+    for(int i=0;i<30;++i) {
+        for(const auto& splat:motion.seed(*preset)) {
+            CHECK(splat.color.g < .02f);
+            CHECK(splat.color.b > .6f);
+            blue |= splat.color.b > .9f && splat.color.r < .2f;
+            pink |= splat.color.r > .8f && splat.color.b < .75f;
+        }
+    }
+    CHECK(blue); CHECK(pink);
 }
