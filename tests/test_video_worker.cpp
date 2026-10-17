@@ -42,6 +42,29 @@ TEST_CASE("Video worker coalesces replacements and preserves current after a bad
     worker.playback(session,10,false);
     CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==100);
 }
+TEST_CASE("Video worker prepares a paused clip after session re-entry") {
+    VideoWorker worker(videoFixture(""));
+    auto session=worker.acquireSession();
+    waitEvent(worker,session,VideoEventKind::Catalog);
+    worker.open({session,1,"reordered.mp4"});
+    waitEvent(worker,session,VideoEventKind::Frame);
+    worker.commit(session,1);
+    worker.playback(session,10,false);
+    // EOF proves the worker has activated generation 1 before ending the session.
+    waitEvent(worker,session,VideoEventKind::Eof);
+    worker.cancel(session);
+    waitEvent(worker,session,VideoEventKind::Released);
+
+    session=worker.acquireSession();
+    waitEvent(worker,session,VideoEventKind::Catalog);
+    worker.playback(session,0,true);
+    worker.open({session,1,"reordered.mp4"});
+    auto first=waitEvent(worker,session,VideoEventKind::Frame);
+    REQUIRE(first.frame);
+    CHECK(first.session==session);
+    CHECK(first.generation==1);
+    CHECK(first.frame->pts==0);
+}
 TEST_CASE("Video worker shutdown cancels blocked decoding cooperatively") {
     struct Blocking : VideoSource {
         std::function<bool()> cancelled;

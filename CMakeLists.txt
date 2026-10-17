@@ -200,7 +200,10 @@ if(SIDESHOW_BUILD_ISF_TESTS)
     target_link_libraries(sideshow_isf_runtime_tests PRIVATE sideshow_isf_runtime SDL2::SDL2)
 endif()
 if(SIDESHOW_BUILD_ISF_TESTS)
-    add_executable(sideshow_isf_backend_tests tests/test_isf_backend_gl.cpp)
+    add_executable(sideshow_isf_backend_tests tests/test_isf_backend_gl.cpp src/isf_runtime.cpp)
+    # Inject a recoverable GL allocation failure only in this test executable.
+    target_compile_options(sideshow_isf_backend_tests PRIVATE
+        -include ${CMAKE_CURRENT_SOURCE_DIR}/tests/support/isf_gl_failure.h)
     target_link_libraries(sideshow_isf_backend_tests PRIVATE sideshow_isf_runtime SDL2::SDL2)
 endif()
 
