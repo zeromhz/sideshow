@@ -120,25 +120,31 @@ void IsfBackend::render(float dt) {
     if (!state.runtime) return;
     double elapsed = std::isfinite(dt) ? std::max(0.0, double(dt)) : 0;
     if (state.prepared) {
+        bool rejected = false;
         if (state.dirty) {
             try { state.runtime->draw(*state.parameters, state.audio, 0, 0, 0); }
             catch (const IsfFrameRejected& e) {
                 logWarn(e.what());
-                *state.parameters = *state.lastGoodParameters;
+                state.parameters->restoreValues(*state.lastGoodParameters);
+                rejected = true;
             }
         }
         state.runtime->present(state.width, state.height);
         state.prepared = false;
         state.dirty = false;
         state.frame = 1;
-        state.parameters->presented();
+        // A rejected redraw presents the prepared image, which may already
+        // contain queued events. Acknowledge only those, keeping newer events.
+        if (rejected) state.parameters->presented(*state.lastGoodParameters);
+        else state.parameters->presented();
         *state.lastGoodParameters = *state.parameters;
+        state.lastGoodParameters->presented();
         return;
     }
     try { state.runtime->draw(*state.parameters, state.audio, state.time + elapsed, elapsed, state.frame); }
     catch (const IsfFrameRejected& e) {
         logWarn(e.what());
-        *state.parameters = *state.lastGoodParameters;
+        state.parameters->restoreValues(*state.lastGoodParameters);
         state.runtime->present(state.width, state.height);
         return;
     }

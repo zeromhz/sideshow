@@ -28,5 +28,32 @@ void main(){if(PASSINDEX==0)gl_FragColor=vec4(reset?0.7:level,0,0,1);else gl_Fra
  {
  IsfBackend queued(init,services.loader(),services.context(),services.budget());for(int n=0;n<64;++n)queued.setParameter({"level",{float(n)/100}});queued.setParameter({"level",{.9f}});ready(queued);queued.render(0);requireIsf(red()>=159&&red()<=162,"pending control queue limit not enforced");
  }
+ for(bool prepared : {false,true}) {
+ IsfBackend recovery(init,services.loader(),services.context(),services.budget());
+ ready(recovery);
+ if(!prepared) recovery.render(0);
+ recovery.setParameter({"level",{.4f}});
+ recovery.triggerEvent({"reset"});
+ isf_gl_failure::failNextCheck=true;
+ recovery.render(.01f);
+ requireIsf(!isf_gl_failure::failNextCheck,"allocation failure was not injected");
+ requireIsf(red()>=50&&red()<=52,"rejected frame changed retained picture");
+ recovery.render(.01f);
+ requireIsf(red()>=177&&red()<=180,"rejected frame discarded pending event");
+ recovery.render(.01f);
+ requireIsf(red()>=50&&red()<=52,"event repeated or rejected parameter was retained");
+ }
+ {
+ IsfBackend queuedEvent(init,services.loader(),services.context(),services.budget());
+ queuedEvent.triggerEvent({"reset"});
+ ready(queuedEvent);
+ queuedEvent.clearAudioHistory(); // Force a redraw of the prepared first frame.
+ isf_gl_failure::failNextCheck=true;
+ queuedEvent.render(0);
+ requireIsf(!isf_gl_failure::failNextCheck,"prepared redraw failure was not injected");
+ requireIsf(red()>=177&&red()<=180,"prepared event was not presented");
+ queuedEvent.render(.01f);
+ requireIsf(red()>=50&&red()<=52,"already presented event repeated after rejection");
+ }
  requireIsf(services.budget().used()==0,"backend leaked textures");std::cout<<"ISF backend checks passed\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

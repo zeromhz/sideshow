@@ -14,6 +14,8 @@ public:
  const std::map<std::string,IsfValue>& values() const{return values_;}
  const std::set<std::string>& events() const{return events_;}
  void presented(){events_.clear();}
+ void presented(const IsfParameters& displayed){for(const auto& event:displayed.events_)events_.erase(event);}
+ void restoreValues(const IsfParameters& previous){values_=previous.values_;}
 private:
  std::vector<IsfInput> inputs_;std::map<std::string,IsfValue> values_;std::set<std::string> events_;
 };

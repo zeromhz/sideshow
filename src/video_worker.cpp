@@ -60,6 +60,7 @@ struct VideoWorker::Impl {
             executingRevision=revision.load();
             if(workerSession!=session) {
                 auto old=workerSession;workerSession=session;
+                activeGeneration=0;
                 frames.clear();catalogEvent.reset();errorEvent.reset();eofEvent.reset();
                 lock.unlock();current={};candidate={};lock.lock();
                 if(old) releaseEvent=VideoEvent{VideoEventKind::Released,old,0,{},{},{},0};
@@ -146,6 +147,8 @@ VideoWorker::~VideoWorker()=default;
 uint64_t VideoWorker::acquireSession() {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
     p.session=++p.serial;p.requested.reset();p.rewindGeneration=0;p.committed=0;p.position=0;p.paused=false;
+    // Generation numbers restart in each backend session.
+    p.activeGeneration=0;p.rejected=0;p.preparing=false;
     ++p.revision;p.wake.notify_all();return p.session;
 }
 void VideoWorker::open(VideoOpenRequest request) {
