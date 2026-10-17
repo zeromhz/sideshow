@@ -12,7 +12,7 @@ public:
  void next()override;void prev()override;void random()override;
  bool selectPreset(const std::string&)override;bool selectPlaylist(const std::string&)override;
  VisualSelection selection()const override;
- void setParameter(const cmd::IsfParam&)override;void triggerEvent(const cmd::IsfEvent&)override;
+ CommandResult setParameter(const cmd::IsfParam&)override;CommandResult triggerEvent(const cmd::IsfEvent&)override;
 private:struct Impl;std::unique_ptr<Impl> impl_;
 };
 }

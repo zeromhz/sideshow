@@ -80,42 +80,81 @@ void VisualController::updateSettings() {
     active_->setSettings(settings_);
     if(pending_) pending_->setSettings(settings_);
 }
-void VisualController::apply(const Command& command) {
+CommandResult VisualController::apply(const Command& command) {
     auto* target=pending_ ? pending_.get() : active_.get();
-    std::visit([&](const auto& c) {
+    return std::visit([&](const auto& c) -> CommandResult {
         using T=std::decay_t<decltype(c)>;
-        if constexpr(std::is_same_v<T,cmd::Mode>) setMode(c.value);
-        else if constexpr(std::is_same_v<T,cmd::IsfParam> || std::is_same_v<T,cmd::IsfEvent>) {
+        if constexpr(std::is_same_v<T,cmd::Mode>) {
+            if(!setMode(c.value)) return {"rejected","Mode initialization failed"};
+            const auto name=std::string(visualModeName(c.value));
+            if(pending_) return {"accepted","Mode loading: "+name};
+            return {"applied","mode="+name};
+        } else if constexpr(std::is_same_v<T,cmd::IsfParam> || std::is_same_v<T,cmd::IsfEvent>) {
             if(auto control=target->isfControl()) {
-                if constexpr(std::is_same_v<T,cmd::IsfParam>) control->setParameter(c);
-                else control->triggerEvent(c);
-            } else logWarn("ISF control ignored outside ISF mode");
-        }
-        else if constexpr(std::is_same_v<T,cmd::VideoEndMode> || std::is_same_v<T,cmd::VideoPause> || std::is_same_v<T,cmd::VideoRestart>) {
+                if constexpr(std::is_same_v<T,cmd::IsfParam>) return control->setParameter(c);
+                else return control->triggerEvent(c);
+            }
+            return {"rejected","ISF control requires ISF mode"};
+        } else if constexpr(std::is_same_v<T,cmd::VideoEndMode> || std::is_same_v<T,cmd::VideoPause> || std::is_same_v<T,cmd::VideoRestart>) {
             if(auto control=target->videoControl()) {
-                if constexpr(std::is_same_v<T,cmd::VideoEndMode>) control->setEnd(c.value);
-                else if constexpr(std::is_same_v<T,cmd::VideoPause>) control->setPaused(c.on);
-                else control->restart();
-            } else logWarn("Video control ignored outside video mode");
-        }
-        else if constexpr(std::is_same_v<T,cmd::Next>) target->next();
-        else if constexpr(std::is_same_v<T,cmd::Prev>) target->prev();
-        else if constexpr(std::is_same_v<T,cmd::Random>) target->random();
-        else if constexpr(std::is_same_v<T,cmd::Preset>) {
-            if(!target->selectPreset(c.name)) logWarn("Unknown or broken preset: "+c.name);
+                if constexpr(std::is_same_v<T,cmd::VideoEndMode>) {
+                    control->setEnd(c.value);
+                    return {"applied","video_end="+std::string(videoEndName(control->end()))};
+                } else if constexpr(std::is_same_v<T,cmd::VideoPause>) {
+                    control->setPaused(c.on);
+                    return {"accepted",std::string("Video pause request accepted: ")+(c.on?"on":"off")};
+                } else {
+                    if(target->preparation().state!=PreparationState::Ready)
+                        return {"rejected","Video restart requires a loaded clip; retry after loading"};
+                    control->restart();
+                    return {"accepted","Video restart request accepted"};
+                }
+            }
+            return {"rejected","Video control requires video mode"};
+        } else if constexpr(std::is_same_v<T,cmd::Next> || std::is_same_v<T,cmd::Prev> || std::is_same_v<T,cmd::Random>) {
+            // These backends drop navigation before their initial catalog is ready.
+            // Readiness also guarantees a current selection for relative navigation.
+            if((target->videoControl() || target->isfControl()) &&
+               target->preparation().state!=PreparationState::Ready)
+                return {"rejected","Navigation requires a loaded visual; retry after loading"};
+            std::string detail;
+            if constexpr(std::is_same_v<T,cmd::Next>) {
+                target->next();detail="Next preset request accepted";
+            } else if constexpr(std::is_same_v<T,cmd::Prev>) {
+                target->prev();detail="Previous preset request accepted";
+            } else {
+                target->random();detail="Random preset request accepted";
+            }
+            if(!pending_ && mode_==VisualMode::Fluid)
+                return {"applied","preset="+target->selection().preset};
+            return {"accepted",std::move(detail)};
+        } else if constexpr(std::is_same_v<T,cmd::Preset>) {
+            if(!target->selectPreset(c.name)) return {"rejected","Unknown or broken preset: "+c.name};
+            if(!pending_ && mode_==VisualMode::Fluid)
+                return {"applied","preset="+target->selection().preset};
+            return {"accepted","Preset request accepted: "+c.name};
         } else if constexpr(std::is_same_v<T,cmd::Playlist>) {
-            if(!target->selectPlaylist(c.name)) logWarn("Unknown or empty playlist: "+c.name);
+            if(!target->selectPlaylist(c.name)) return {"rejected","Unknown or empty playlist: "+c.name};
+            if(!pending_ && mode_==VisualMode::Fluid)
+                return {"applied","playlist="+target->selection().playlist};
+            return {"accepted","Playlist request accepted: "+c.name};
         } else if constexpr(std::is_same_v<T,cmd::Lock>) {
             settings_.locked=c.on;updateSettings();
+            return {"applied",std::string("lock=")+(settings_.locked?"on":"off")};
         } else if constexpr(std::is_same_v<T,cmd::Duration>) {
             settings_.duration=c.seconds;updateSettings();
+            return {"applied","duration="+std::to_string(settings_.duration)};
         } else if constexpr(std::is_same_v<T,cmd::HardCut>) {
             settings_.hardcut=c.on;updateSettings();
+            return {"applied",std::string("hardcut=")+(settings_.hardcut?"on":"off")};
         } else if constexpr(std::is_same_v<T,cmd::FluidPersistence>) {
             settings_.fluidPersistence=c.value;updateSettings();
+            return {"applied","fluid_persistence="+std::to_string(settings_.fluidPersistence)};
         } else if constexpr(std::is_same_v<T,cmd::BeatSensitivity>) {
             settings_.beatSensitivity=c.value;updateSettings();
+            return {"applied","beat_sensitivity="+std::to_string(settings_.beatSensitivity)};
         }
+        return {"rejected","Command is not a visual control"};
     },command);
 }
 }

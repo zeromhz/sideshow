@@ -45,20 +45,24 @@ struct IsfBackend::Impl {
         dispatch();
     }
 
-    void control(const IsfControlCommand& command) {
+    CommandResult control(const IsfControlCommand& command) {
         auto route = playback.route(command);
-        if (route == IsfControlRoute::Full) logWarn("ISF pending control limit reached");
-        if (route != IsfControlRoute::Apply || !runtime || !parameters) return;
+        if (route == IsfControlRoute::Full) return {"rejected", "ISF pending control limit reached"};
+        if (route == IsfControlRoute::Queued)
+            return {"accepted", "ISF control queued; validation awaits preset loading"};
+        if (route != IsfControlRoute::Apply || !runtime || !parameters)
+            return {"rejected", "ISF control has no valid target"};
         std::string why;
         auto proposed = *parameters;
-        if (!proposed.apply(command, why)) { logWarn("ISF: " + why); return; }
+        if (!proposed.apply(command, why)) return {"rejected", why};
         auto size = dimensions();
         if (!runtime->update(proposed, size.first, size.second, why, prepared)) {
-            logWarn("ISF: " + why);
-            return;
+            return {"rejected", why};
         }
         *parameters = std::move(proposed);
         dirty = true;
+        // Rendering can still reject this update and restore the last good values.
+        return {"accepted", "ISF control validated; awaiting presentation"};
     }
 
     void maintenance() {
@@ -183,6 +187,6 @@ bool IsfBackend::selectPlaylist(const std::string& folder) {
     return accepted;
 }
 VisualSelection IsfBackend::selection() const { return impl_->playback.selection(); }
-void IsfBackend::setParameter(const cmd::IsfParam& command) { impl_->control(command); }
-void IsfBackend::triggerEvent(const cmd::IsfEvent& command) { impl_->control(command); }
+CommandResult IsfBackend::setParameter(const cmd::IsfParam& command) { return impl_->control(command); }
+CommandResult IsfBackend::triggerEvent(const cmd::IsfEvent& command) { return impl_->control(command); }
 }

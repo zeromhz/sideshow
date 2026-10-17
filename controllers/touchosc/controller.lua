@@ -5,6 +5,10 @@ local editing, buffer, shift = nil, '', false
 local pendingMaster, lastMaster = nil, 0
 local pendingPersistence, lastPersistence = nil, 0
 local replies, pingDeadline, lastStatus = {}, nil, 0
+local requests, requestOrder, displayed = {}, {}, {}
+local serial = 0
+local session = tostring(getMillis()) .. '-' .. tostring(math.random(100000000,999999999))
+local function clean(s) return s:gsub('[%c]', ' '):sub(1,160) end
 
 local function control(name) return root:findByName(name, true) end
 local function label(name, text) control(name).values.text = text end
@@ -19,11 +23,56 @@ local function target()
   end
   return id
 end
-local function send(command, args)
+local function renderAcknowledgements()
+  for slot=1,2 do
+    local r=displayed[slot]
+    local ids={}
+    if r then for id in pairs(r.results) do ids[#ids+1]=id end; table.sort(ids) end
+    local summary=''
+    if r then
+      summary=r.command .. ' → ' .. r.target .. ': '
+      if #ids==0 then summary=summary .. (r.closed and 'No reply after 2s' or 'Waiting (2s)')
+      elseif r.target=='all' then summary=summary .. #ids .. ' replies; partial / all unconfirmed'
+      else summary=summary .. r.results[ids[1]].state end
+    end
+    label('ack_title_' .. slot, summary)
+    for row=1,8 do
+      local id=ids[row]
+      local result=id and r.results[id]
+      local text=''
+      if result then
+        text=id .. ' | ' .. result.state
+        if result.state=='accepted' then text=text .. ' (not complete)' end
+        text=text .. ' | ' .. result.detail
+      end
+      label('ack_' .. slot .. '_' .. row, text)
+    end
+  end
+end
+local function clearAcknowledgements()
+  requests, requestOrder, displayed = {}, {}, {}
+  renderAcknowledgements()
+end
+local function send(command, args, append)
   local id = target()
   if not id then return end
-  sendOSC({'/sideshow/' .. id .. '/' .. command, args or {}}, {true})
-  status('Sent to ' .. id .. ': ' .. command .. '  |  not acknowledged')
+  local port=tonumber(trim(fields.reply_port or ''))
+  if not finite(port) or port%1~=0 or port<1 or port>65535 then
+    status('Reply port must be an integer from 1 to 65535.'); return
+  end
+  serial=serial+1
+  local requestID=session .. '-' .. serial
+  local r={command=command,target=id,deadline=getMillis()+2000,results={}}
+  requests[requestID]=r
+  requestOrder[#requestOrder+1]=requestID
+  while #requestOrder>128 do requests[table.remove(requestOrder,1)]=nil end
+  if not append then displayed={} end
+  displayed[#displayed+1]=r
+  local payload={argument('s',requestID),argument('i',port),argument('s','/sideshow/' .. id .. '/' .. command)}
+  for _,a in ipairs(args or {}) do payload[#payload+1]=a end
+  sendOSC({'/sideshow/request',payload},{true})
+  status('Requested ' .. command .. '. Replies below; accepted does not mean complete.')
+  renderAcknowledgements()
 end
 local function setField(name, value)
   fields[name] = value
@@ -68,9 +117,10 @@ function init()
   pendingPersistence = nil
   pendingMaster, pingDeadline, replies = nil, nil, {}
   editing, buffer, shift = nil, '', false
-  for _, name in ipairs({'target','playlist','preset','duration','beat','input','values','event','kind'}) do
+  for _, name in ipairs({'target','playlist','preset','duration','beat','input','values','event','kind','reply_port'}) do
     fields[name] = control('field_' .. name).values.text
   end
+  clearAcknowledgements()
   control('keyboard').visible = false
   status('Ready. Configure OSC connection 1, then Ping. Nothing sent on open.')
   ready = true
@@ -91,6 +141,7 @@ function onReceiveNotify(action, value)
     if not editing then return end
     if value == 'cancel' then editing=nil; control('keyboard').visible=false; return end
     if value == 'done' then
+      if editing=='target' or editing=='reply_port' then clearAcknowledgements() end
       setField(editing, buffer); editing=nil; control('keyboard').visible=false; return
     elseif value == 'clear' then buffer=''
     elseif value == 'back' then buffer=buffer:sub(1, -2)
@@ -102,7 +153,7 @@ function onReceiveNotify(action, value)
   end
   if editing then return end
   if action == 'target' then
-    pendingMaster=nil; pendingPersistence=nil; setField('target', value)
+    pendingMaster=nil; pendingPersistence=nil; clearAcknowledgements(); setField('target', value)
     status('Target: ' .. value .. '. Controls show local values, not panel state.')
   elseif action == 'persistence' then
     if not finite(value) then return end
@@ -131,7 +182,7 @@ function onReceiveNotify(action, value)
     send('isf_event', {argument('s', name)})
   elseif action == 'fluid' then
     send('mode', {argument('s', 'fluid')})
-    send('preset', {argument('s', value)})
+    send('preset', {argument('s', value)}, true)
   elseif action == 'ping' then
     replies={}; pingDeadline=getMillis()+2000
     for i=1,8 do label('panel_reply_' .. i, '') end
@@ -142,7 +193,25 @@ function onReceiveNotify(action, value)
 end
 
 function onReceiveOSC(message, connections)
-  if not ready or not connections[1] or message[1] ~= '/sideshow/pong' then return end
+  if not ready or not connections or not connections[1] then return end
+  if message[1]=='/sideshow/ack' then
+    local a=message[2]
+    if type(a)~='table' or #a~=4 then return end
+    for _,v in ipairs(a) do if v.tag~='s' or type(v.value)~='string' then return end end
+    local r=requests[a[1].value]
+    local panel,state=a[2].value,a[3].value
+    if not r or getMillis()>=r.deadline or #panel<1 or #panel>32 or not panel:match('^[a-z0-9][a-z0-9%-]*$') then return end
+    if r.target~='all' and panel~=r.target then return end
+    if not ({applied=true,accepted=true,rejected=true,superseded=true})[state] then return end
+    -- One outcome per panel; duplicates cannot overwrite the original result.
+    if r.results[panel] then return end
+    local count=0; for _ in pairs(r.results) do count=count+1 end
+    if count>=8 then return end
+    r.results[panel]={state=state,detail=clean(a[4].value)}
+    renderAcknowledgements()
+    return
+  end
+  if message[1] ~= '/sideshow/pong' then return end
   local a=message[2]
   if #a ~= 3 or a[1].tag ~= 's' or a[2].tag ~= 's' or a[3].tag ~= 'f' then return end
   if not finite(a[3].value) then return end
@@ -155,6 +224,15 @@ end
 function update()
   if not ready then return end
   local now=getMillis()
+  for i=#requestOrder,1,-1 do
+    local id=requestOrder[i]
+    local r=requests[id]
+    if not r or now>=r.deadline then
+      if r then r.closed=true end
+      requests[id]=nil; table.remove(requestOrder,i)
+    end
+  end
+  renderAcknowledgements()
   if pendingPersistence and now-lastPersistence>=34 then
     send('fluid_persistence', {argument('f', pendingPersistence)})
     pendingPersistence=nil; lastPersistence=now

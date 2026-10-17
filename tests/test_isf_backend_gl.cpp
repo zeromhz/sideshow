@@ -16,7 +16,12 @@ void main(){if(PASSINDEX==0)gl_FragColor=vec4(reset?0.7:level,0,0,1);else gl_Fra
  Config config;config.isf.root=tree.root.string();config.isf.preset="a.fs";IsfServices services(config.isf);
  BackendInit init{config,PlaybackSettings{1,false,true,false,1},{".","a.fs"},320,180};
  {
- IsfBackend backend(init,services.loader(),services.context(),services.budget());backend.setParameter({"level",{.4f}});ready(backend);backend.triggerEvent({"reset"});backend.render(0);requireIsf(red()>=177&&red()<=180,"event after readiness not presented");backend.render(.1f);requireIsf(red()>=100&&red()<=104,"queued parameter missing or event repeated");
+ IsfBackend backend(init,services.loader(),services.context(),services.budget());
+ requireIsf(backend.setParameter({"level",{.4f}}).status=="accepted","queued control claimed applied");ready(backend);
+ requireIsf(backend.setParameter({"missing",{.4f}}).status=="rejected","unknown parameter acknowledged");
+ requireIsf(backend.setParameter({"level",{.4f,.5f}}).status=="rejected","wrong parameter arity acknowledged");
+ requireIsf(backend.triggerEvent({"level"}).status=="rejected","non-event acknowledged");
+ requireIsf(backend.setParameter({"level",{.4f}}).status=="accepted","control claimed presentation before rendering");backend.triggerEvent({"reset"});backend.render(0);requireIsf(red()>=177&&red()<=180,"event after readiness not presented");backend.render(.1f);requireIsf(red()>=100&&red()<=104,"queued parameter missing or event repeated");
  backend.selectPreset("b.fs");requireIsf(!backend.selectPreset("missing.fs"),"invalid newest selection accepted");for(int i=0;i<30;++i){backend.maintenance();backend.render(.01f);std::this_thread::sleep_for(std::chrono::milliseconds(2));}requireIsf(backend.selection().preset=="a.fs"&&red()<110,"stale candidate activated");
  backend.setParameter({"level",{.8f}});backend.triggerEvent({"reset"});backend.render(.01f);requireIsf(red()>=100&&red()<=104,"invalid newest preset routed controls to old shader");
  backend.selectPreset("b.fs");backend.selectPlaylist("missing");backend.setParameter({"level",{.9f}});backend.triggerEvent({"reset"});backend.render(.01f);requireIsf(red()>=100&&red()<=104,"invalid newest folder routed controls to old shader");
@@ -26,7 +31,7 @@ void main(){if(PASSINDEX==0)gl_FragColor=vec4(reset?0.7:level,0,0,1);else gl_Fra
  for(int n=0;n<100&&backend.selection().preset!="b.fs";++n){backend.maintenance();backend.render(.001f);std::this_thread::sleep_for(std::chrono::milliseconds(2));}requireIsf(backend.selection().preset=="b.fs","duration did not advance");
  }
  {
- IsfBackend queued(init,services.loader(),services.context(),services.budget());for(int n=0;n<64;++n)queued.setParameter({"level",{float(n)/100}});queued.setParameter({"level",{.9f}});ready(queued);queued.render(0);requireIsf(red()>=159&&red()<=162,"pending control queue limit not enforced");
+ IsfBackend queued(init,services.loader(),services.context(),services.budget());for(int n=0;n<64;++n)queued.setParameter({"level",{float(n)/100}});requireIsf(queued.setParameter({"level",{.9f}}).status=="rejected","full control queue acknowledged");ready(queued);queued.render(0);requireIsf(red()>=159&&red()<=162,"pending control queue limit not enforced");
  }
  for(bool prepared : {false,true}) {
  IsfBackend recovery(init,services.loader(),services.context(),services.budget());

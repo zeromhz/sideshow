@@ -119,10 +119,18 @@ int main(int argc, char** argv) {
 
             // Skip a failed preset first, so it can't override or double an OSC command.
             visuals.maintenance();
-            commands.processFrame([&](const Command& command) {
-                if(const auto* c=std::get_if<cmd::Master>(&command)) output.setTarget(c->value);
-                else if(const auto* c=std::get_if<cmd::Blackout>(&command)) output.setBlackout(c->on);
-                else visuals.apply(command);
+            commands.processAcknowledgedFrame([&](const Command& command) {
+                if(const auto* c=std::get_if<cmd::Master>(&command)) {
+                    output.setTarget(c->value);
+                    return CommandResult{"applied","master="+std::to_string(c->value)};
+                }
+                if(const auto* c=std::get_if<cmd::Blackout>(&command)) {
+                    output.setBlackout(c->on);
+                    return CommandResult{"applied",c->on ? "blackout=1" : "blackout=0"};
+                }
+                auto result=visuals.apply(command);
+                if(result.status=="rejected") logWarn("OSC: "+result.detail);
+                return result;
             });
 
             const Uint32 now = SDL_GetTicks();
