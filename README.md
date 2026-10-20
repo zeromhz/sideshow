@@ -184,3 +184,33 @@ configuration, FFmpeg dependencies, architecture limits and hardware validation.
 ISF mode plays local generators with microphone waveform/FFT inputs, typed OSC
 parameters, events and persistent feedback. Setup includes plasma, spectrum and
 feedback examples. See [ISF operation and limits](docs/isf.md).
+
+### Fractals
+
+Setup also installs three original fractal generators in the ISF `fractal` folder. All
+three animate in silence, react to the mic, and share the same parameters.
+
+| Shader | Look | Audio |
+|---|---|---|
+| `fractal/julia.fs` | Metallic Julia set whose parameter slowly circles, morphing between spirals, dendrites and dust | Bass pushes the set apart and speeds the morph; overall level brightens highlights |
+| `fractal/dive.fs` | Endless dive into the Mandelbrot set that loops seamlessly | Bass surges the dive forward; level brightens the edges |
+| `fractal/kleinian.fs` | Apollonian circle packing made by repeated circle inversion, bent around a drifting point | Bass swells the circles and speeds the drift; level brightens the edges |
+
+```bash
+tools/osc_send.py mode isf
+tools/osc_send.py playlist fractal              # rotate through the three
+tools/osc_send.py preset fractal/dive.fs        # or pick one
+tools/osc_send.py isf_param speed 2.0
+```
+
+| Parameter | Range (default) | Effect |
+|---|---|---|
+| `speed` | 0–4 (1) | Animation speed; changes apply smoothly, without jumps |
+| `zoom` | 0.5–4 (1) | Magnification |
+| `color` | 0–1 (0) | Palette offset; colors also cycle slowly on their own |
+| `detail` | 0–1 (0.4, Kleinian 0.5) | Iteration limit (Julia 32–256, dive 64–512) or inversion depth (Kleinian 4–12) |
+| `reactivity` | 0–3 (1) | Microphone influence; 0 ignores the mic |
+| `spin` | −2–2 (0.2) | Dive only: rotation speed and direction |
+
+The TouchOSC ISF parameter fields send these as floats. Dive costs the most GPU time.
+If a panel drops below 60 fps, lower `detail` or the `[isf]` resolution cap.

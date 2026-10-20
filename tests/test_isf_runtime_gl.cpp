@@ -76,6 +76,15 @@ void main(){gl_FragColor=vec4(IMG_PIXEL(fft,vec2(32.5,0.5)).r,0,0,1);})");
  if(std::string(name)=="spectrum.fs"){IsfAudio sine;std::vector<float> pcm(2048);for(int n=0;n<1024;++n)pcm[n*2]=std::sin(2*3.141592653589793*32*n/1024);sine.append(pcm.data(),1024);r.draw(p,sine,.1,.1,1);requireIsf(energy()>initial,"bundled spectrum did not react to sine");}
  if(std::string(name)=="feedback.fs"){r.draw(p,audio,0,0,1);requireIsf(energy()>initial,"bundled feedback did not retain history");std::string why;p.trigger("reset",why);r.draw(p,audio,0,0,2);requireIsf(energy()==initial,"bundled feedback reset failed");}
  }
+ for(const char* name:{"julia.fs","dive.fs","kleinian.fs"}) {
+ std::ifstream input(std::string(ISF_ASSET_DIR)+"/fractal/"+name);requireIsf(bool(input),"bundled fractal missing");std::string text{std::istreambuf_iterator<char>(input),{}};auto s=source(text);
+ IsfAudio loud;std::vector<float> pcm(4096);for(int n=0;n<2048;++n)pcm[n*2]=pcm[n*2+1]=.5f*float(std::sin(2*3.141592653589793*120*n/48000.0));loud.append(pcm.data(),2048);
+ // Run 20 frames at the 0.1 s step limit so the integrated animation state visibly advances.
+ auto run=[&](const IsfAudio& input,uint64_t frames){IsfRuntime r(context,budget,s,64,64);IsfParameters p(s->document.inputs);p.initializeDefaults(r.defaults());for(uint64_t f=0;f<frames;++f)r.draw(p,input,f*.1,.1,f);r.present(320,180);std::vector<unsigned char> pixels(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,pixels.data());return pixels;};
+ auto first=run(audio,2),later=run(audio,20),reacting=run(loud,20);
+ uint64_t lit=0;for(size_t n=0;n<later.size();n+=4)lit+=later[n]+later[n+1]+later[n+2];requireIsf(lit>320*180*30,"bundled fractal rendered black");
+ requireIsf(first!=later,"bundled fractal did not animate in silence");requireIsf(reacting!=later,"bundled fractal ignored the microphone");
+ }
  {
  auto s=source("/*{}*/void main(){gl_FragColor=vec4(1,0,0,1);}");
  IsfRuntime r(context,budget,s,32,32);IsfParameters p({});p.initializeDefaults(r.defaults());
