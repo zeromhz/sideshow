@@ -8,6 +8,8 @@ are supported. Video effects, transitions and dynamic image inputs are not suppo
 Setup installs three original MIT-licensed examples, preserving existing files:
 `examples/plasma.fs` (speed and tint), `examples/spectrum.fs` (microphone spectrum
 and gain), and `examples/feedback.fs` (persistent trails, decay and reset event).
+It also installs three fractal generators: `fractal/julia.fs`, `fractal/dive.fs` and
+`fractal/kleinian.fs`. Their parameters are listed in the [README](../README.md#fractals).
 
 ```sh
 python3 tools/osc_send.py --host 127.0.0.1 mode isf
@@ -69,7 +71,16 @@ mono capture is duplicated. Audio width defaults to 512; integer `MAX` selects
 a one-column waveform reports RMS. FFT uses a periodic Hann window and a radix-2
 transform sized to the next power of two at least twice the number of bins.
 Capture loss/stalls clear both active and pending histories to silence. Spectrum
-therefore stays dark without a microphone; the other examples animate in silence.
+therefore stays dark without a microphone; the other examples and the fractals
+animate in silence.
+
+The fractals keep their animation phases and audio envelopes in a small persistent
+RGBA8 target, with each value packed into 32-bit fixed point. They use no float render
+target, so they need no float-framebuffer extension. Integrating the phase is what keeps
+speed changes from jumping. The dive avoids running out of single-precision depth in two
+ways. It loops over a self-similar region around a Misiurewicz point, so it never goes
+deeper than about 4e-6. It also iterates every pixel as a perturbation of that point's
+exact orbit, with rebasing, which keeps it sharp at that scale.
 
 `[isf] max_width = 1280` and `max_height = 720` cap internal resolution while
 preserving aspect ratio; caps swap for portrait. Each must be an integer 1–4096.
