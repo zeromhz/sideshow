@@ -150,7 +150,11 @@ int main(int argc, char** argv) {
         }
         Display display(config.display);
         IsfServices isfServices(config.isf);
-        VideoWorker videoWorker(config.video.root);
+        VideoWorker videoWorker(config.video.root,
+            [hardware = config.video.hardwareDecode](const std::filesystem::path& file, std::function<bool()> cancelled)
+                -> std::unique_ptr<VideoSource> {
+                return std::make_unique<VideoDecoder>(file, std::move(cancelled), VideoDecoderOptions{hardware});
+            });
         VisualController visuals(config,display.drawableWidth(),display.drawableHeight(),
             [&videoWorker,&isfServices](VisualMode mode,const BackendInit& init)->std::unique_ptr<VisualBackend> {
                 if(mode==VisualMode::Isf) return std::make_unique<IsfBackend>(init,isfServices.loader(),isfServices.context(),isfServices.budget());

@@ -133,6 +133,7 @@ ConfigResult parseConfig(std::string_view tomlText) {
         } else w.push_back("isf.scale: expected a table of shader IDs, ignoring");
     }
     readKey(root, "video", "root", c.video.root, nonEmpty, w);
+    readKey(root, "video", "hardware_decode", c.video.hardwareDecode, any, w);
     readKey(root, "video", "preset", c.video.preset,
             [](const std::string& v) { return v.empty() || validVideoId(v); }, w);
     std::string videoEnd = "loop";

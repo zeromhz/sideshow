@@ -96,6 +96,8 @@ A failed switch keeps the active backend. Fluid startup failure falls back to Mi
 
 See [local video playback](video.md) for OSC controls, recursive folder semantics,
 configuration, FFmpeg dependencies, architecture limits and hardware validation.
+`[video] hardware_decode` (boolean, default `true`) decodes HEVC clips on the Pi 5's hardware
+decoder when FFmpeg offers it, falling back to software per clip.
 
 ## ISF settings
 

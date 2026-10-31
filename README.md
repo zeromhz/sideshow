@@ -203,7 +203,8 @@ Desktop validation does not establish Raspberry Pi performance; Pi/GLES hardware
 ## Video mode
 
 See [local video playback](docs/video.md) for OSC controls, recursive folder semantics,
-configuration, FFmpeg dependencies, architecture limits and hardware validation.
+configuration, FFmpeg dependencies, architecture limits and hardware validation. On a Pi 5,
+encode clips as 8-bit HEVC (H.265): it is decoded in hardware, while H.264 uses the CPU.
 
 ## ISF shaders
 

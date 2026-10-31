@@ -19,6 +19,11 @@ generate('rotated.mp4','-display_rotation','90','-i',str(root/'aspect.mp4'),'-c'
 generate('audio-only.mov','-f','lavfi','-i','sine=frequency=440','-t','0.1','-c:a','pcm_s16le')
 generate('interlaced.mkv', *source, '-t','0.6','-vf','setfield=tff','-flags','+ilme+ildct','-c:v','mpeg2video')
 generate('hdr.mkv', *source, '-t','0.6','-vf','setparams=color_trc=smpte2084','-c:v','ffv1')
+# HEVC lives in its own folder so the main fixture folder's clip order is unchanged.
+hevc = root.parent / 'video-hevc'
+hevc.mkdir(exist_ok=True)
+subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y',*source,'-t','0.6','-c:v','libx265',
+                '-x265-params','log-level=error','-tag:v','hvc1','-pix_fmt','yuv420p',str(hevc/'hevc.mp4')],check=True)
 (root/'corrupt.mp4').write_bytes(b'not a video')
 data=(root/'reordered.mp4').read_bytes()
 (root/'truncated.mp4').write_bytes(data[:len(data)//2])

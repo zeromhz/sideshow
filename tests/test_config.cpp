@@ -188,6 +188,14 @@ TEST_CASE("ISF per-shader render scales accept shader IDs and 0.25-1","[isf]") {
  CHECK(sideshow::parseConfig("[isf]\nscale = 0.5\n").warnings.size()==1);
 }
 
+TEST_CASE("Config: hardware video decoding defaults on and can be turned off") {
+    CHECK(parseConfig("").config.video.hardwareDecode);
+    auto off = parseConfig("[video]\nhardware_decode = false\n");
+    CHECK(off.warnings.empty()); CHECK_FALSE(off.config.video.hardwareDecode);
+    auto bad = parseConfig("[video]\nhardware_decode = 'no'\n");
+    CHECK(bad.config.video.hardwareDecode); CHECK(bad.warnings.size() == 1);
+}
+
 TEST_CASE("Config: fluid persistence defaults and rejects unsafe multipliers") {
     CHECK(parseConfig("").config.fluid.persistence == 1.0f);
     CHECK(parseConfig("[fluid]\npersistence = 4.0").config.fluid.persistence == 4.0f);

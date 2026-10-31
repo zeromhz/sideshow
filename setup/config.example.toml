@@ -50,6 +50,7 @@ persistence = 1.0              # 1..10: dye lifetime multiplier; motion/FPS unch
 root = "/opt/sideshow/videos"
 preset = ""
 end = "loop"
+hardware_decode = true         # decode HEVC on the Pi 5's hardware decoder when available
 
 [isf]
 root = "/opt/sideshow/isf"

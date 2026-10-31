@@ -65,6 +65,7 @@ struct Config {
         std::string root = "/opt/sideshow/videos";
         std::string preset;
         VideoEnd end = VideoEnd::Loop;
+        bool hardwareDecode = true;  // HEVC on the Pi 5's hardware decoder, when available
     } video;
 
     struct Output {

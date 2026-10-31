@@ -1,10 +1,12 @@
 #include "video_decoder.h"
 #include "video_playback.h"
+#include "log.h"
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
+#include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
@@ -78,6 +80,8 @@ std::pair<int,int> videoOutputSize(int w,int h) {
 }
 struct VideoDecoder::Impl {
     std::function<bool()> cancelled;
+    std::filesystem::path path;
+    VideoDecoderOptions options;
     std::chrono::steady_clock::time_point deadline;
     int fd=-1, stream=-1;
     AVIOContext* io=nullptr;
@@ -89,11 +93,45 @@ struct VideoDecoder::Impl {
     VideoTimestamps timestamps{30};
     bool packetPending=false, draining=false, eof=false;
     int rotation=0;
-    ~Impl() {
-        sws_freeContext(scaler); av_frame_free(&frame); av_packet_free(&packet);
-        avcodec_free_context(&codec); avformat_close_input(&format);
+    // Hardware decoding (HEVC on the Pi 5): frames arrive as DRM_PRIME and are downloaded into
+    // `downloaded` before the usual YUV path. `delivered` records whether this decoder has
+    // produced a frame, so a hardware failure before that can fall back to software.
+    AVBufferRef* hardwareDevice=nullptr;
+    AVPixelFormat hardwareFormat=AV_PIX_FMT_NONE;
+    AVFrame* downloaded=nullptr;
+    bool hardware=false, delivered=false;
+    ~Impl() { release(); }
+    void release() {
+        sws_freeContext(scaler); scaler=nullptr; av_frame_free(&frame); av_frame_free(&downloaded); av_packet_free(&packet);
+        avcodec_free_context(&codec); avformat_close_input(&format); av_buffer_unref(&hardwareDevice);
         if(io) { av_freep(&io->buffer); avio_context_free(&io); }
         if(fd>=0) close(fd);
+        fd=-1; stream=-1; timestamps=VideoTimestamps(30); packetPending=draining=eof=false; rotation=0;
+        hardwareFormat=AV_PIX_FMT_NONE; hardware=false;
+    }
+    static AVPixelFormat pickFormat(AVCodecContext* context, const AVPixelFormat* formats) {
+        const auto& self=*static_cast<const Impl*>(context->opaque);
+        for(auto f=formats;*f!=AV_PIX_FMT_NONE;++f) if(*f==self.hardwareFormat) return *f;
+        // The hardware format was not offered for this stream: take the first software format.
+        for(auto f=formats;*f!=AV_PIX_FMT_NONE;++f) {
+            const auto* d=av_pix_fmt_desc_get(*f);
+            if(d && !(d->flags & AV_PIX_FMT_FLAG_HWACCEL)) return *f;
+        }
+        return AV_PIX_FMT_NONE;
+    }
+    // Uses the decoder's DRM hardware configuration when FFmpeg offers one (Raspberry Pi OS's
+    // FFmpeg exposes the Pi 5 HEVC block this way). Builds without it decode in software.
+    void setupHardware(const AVCodec* decoder) {
+        for(int i=0;;++i) {
+            const AVCodecHWConfig* config=avcodec_get_hw_config(decoder,i);
+            if(!config) return;
+            if(!(config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) || config->device_type!=AV_HWDEVICE_TYPE_DRM) continue;
+            if(av_hwdevice_ctx_create(&hardwareDevice,AV_HWDEVICE_TYPE_DRM,nullptr,nullptr,0)<0) return;
+            codec->hw_device_ctx=av_buffer_ref(hardwareDevice);
+            if(!codec->hw_device_ctx) throw std::bad_alloc();
+            hardwareFormat=config->pix_fmt;codec->opaque=this;codec->get_format=pickFormat;hardware=true;
+            return;
+        }
     }
     bool interrupted() const { return (cancelled && cancelled()) || std::chrono::steady_clock::now()>=deadline; }
     void check() const { if(interrupted()) throw std::runtime_error("Video operation cancelled or timed out"); }
@@ -113,7 +151,7 @@ struct VideoDecoder::Impl {
         return result<0 ? AVERROR(errno) : result;
     }
     static int denyOpen(AVFormatContext*,AVIOContext**,const char*,int,AVDictionary**) { return AVERROR(EACCES); }
-    void open(const std::filesystem::path& path) {
+    void open(bool allowHardware) {
         start();
         fd=openLocal(path);
         struct stat st{};
@@ -152,72 +190,108 @@ struct VideoDecoder::Impl {
         checked(avcodec_parameters_to_context(codec,params),"Configure codec");
         codec->max_pixels = kMaxSourcePixels;
         codec->get_buffer2 = allocateVideoBuffer;
+        if(allowHardware && params->codec_id==AV_CODEC_ID_HEVC) setupHardware(decoder);
 #if LIBAVCODEC_VERSION_MAJOR < 60
         codec->thread_safe_callbacks = 1;
 #endif
-        // Three decode threads leave a core of the Pi 5's four for rendering and audio.
-        codec->thread_count=3; codec->thread_type=FF_THREAD_FRAME|FF_THREAD_SLICE;
+        // Software: three decode threads leave a core of the Pi 5's four for rendering and audio.
+        // Hardware does the decoding itself, so one thread is enough.
+        codec->thread_count=hardware ? 1 : 3; codec->thread_type=FF_THREAD_FRAME|FF_THREAD_SLICE;
         checked(avcodec_open2(codec,decoder,nullptr),"Open codec");
-        packet=av_packet_alloc(); frame=av_frame_alloc(); if(!packet || !frame) throw std::bad_alloc();
+        packet=av_packet_alloc(); frame=av_frame_alloc(); downloaded=av_frame_alloc();
+        if(!packet || !frame || !downloaded) throw std::bad_alloc();
+        if(params->codec_id==AV_CODEC_ID_HEVC && allowHardware)
+            logInfo(std::string("video: ")+(hardware ? "hardware" : "software")+" HEVC decoding for "+path.filename().string());
         auto rate=av_guess_frame_rate(format,s,nullptr); timestamps=VideoTimestamps(av_q2d(rate));
         rotation=std::max(0,stream<int(rotations.size()) && rotations[stream]>=0 ? rotations[stream] : streamRotation(s));
     }
     VideoFrame convert() {
         check();
-        auto size=videoOutputSize(frame->width,frame->height);
+        AVFrame* f=frame;
+        if(hardware && frame->format==hardwareFormat) {
+            // Copy the hardware frame into ordinary memory (YUV); the rest is the software path.
+            av_frame_unref(downloaded);
+            // Prefer a layout the rest of the path handles directly (planar 4:2:0, then NV12)
+            // over the decoder's native one (the Pi's is Broadcom's column-tiled SAND layout).
+            AVPixelFormat* offered=nullptr;
+            if(frame->hw_frames_ctx && av_hwframe_transfer_get_formats(frame->hw_frames_ctx,AV_HWFRAME_TRANSFER_DIRECTION_FROM,&offered,0)>=0 && offered) {
+                AVPixelFormat pick=offered[0];
+                for(auto o=offered;*o!=AV_PIX_FMT_NONE;++o) if(*o==AV_PIX_FMT_YUV420P) {pick=*o;break;}
+                if(pick!=AV_PIX_FMT_YUV420P) for(auto o=offered;*o!=AV_PIX_FMT_NONE;++o) if(*o==AV_PIX_FMT_NV12) {pick=*o;break;}
+                av_free(offered);
+                downloaded->format=pick;
+            }
+            checked(av_hwframe_transfer_data(downloaded,frame,0),"Download hardware video frame");
+            checked(av_frame_copy_props(downloaded,frame),"Copy video frame properties");
+            f=downloaded;
+        }
+        auto size=videoOutputSize(f->width,f->height);
 #if LIBAVUTIL_VERSION_MAJOR >= 58
-        const bool interlaced=frame->flags & AV_FRAME_FLAG_INTERLACED;
+        const bool interlaced=f->flags & AV_FRAME_FLAG_INTERLACED;
 #else
-        const bool interlaced=frame->interlaced_frame;
+        const bool interlaced=f->interlaced_frame;
 #endif
         if(interlaced) throw std::runtime_error("Interlaced video is unsupported");
-        if(hdr(frame->color_trc)) throw std::runtime_error("HDR video is unsupported");
+        if(hdr(f->color_trc)) throw std::runtime_error("HDR video is unsupported");
         VideoFrame result; result.width=size.first;result.height=size.second;
         result.format=VideoPixels::Yuv420;result.stride=result.width;result.chromaStride=(result.width+1)/2;
         result.rotationDegrees=rotation;
-        auto sar=av_guess_sample_aspect_ratio(format,format->streams[stream],frame);
+        auto sar=av_guess_sample_aspect_ratio(format,format->streams[stream],f);
         result.pixelAspect=sar.num>0 && sar.den>0 ? av_q2d(sar) : 1;
-        result.pixelAspect*=double(frame->width)*result.height/(double(frame->height)*result.width);
+        result.pixelAspect*=double(f->width)*result.height/(double(f->height)*result.width);
         const double base=av_q2d(format->streams[stream]->time_base);
 #if LIBAVUTIL_VERSION_MAJOR >= 58
-        auto duration=frame->duration;
+        auto duration=f->duration;
 #else
-        auto duration=frame->pkt_duration;
+        auto duration=f->pkt_duration;
 #endif
-        auto times=timestamps.normalize(frame->best_effort_timestamp==AV_NOPTS_VALUE ? std::nullopt : std::optional<double>(frame->best_effort_timestamp*base), duration>0?std::optional<double>(duration*base):std::nullopt);
+        auto times=timestamps.normalize(f->best_effort_timestamp==AV_NOPTS_VALUE ? std::nullopt : std::optional<double>(f->best_effort_timestamp*base), duration>0?std::optional<double>(duration*base):std::nullopt);
         result.pts=times.first;result.duration=times.second;
         // Frames go to the GPU as 8-bit planar YUV 4:2:0, converted to RGB in the shader. The
         // common case (8-bit 4:2:0 already within the output box) is a plane copy; anything else
         // (other formats, more bits, or footage to shrink) goes through swscale to YUV 4:2:0,
         // keeping its colour matrix and range.
-        const auto source=static_cast<AVPixelFormat>(frame->format);
+        const auto source=static_cast<AVPixelFormat>(f->format);
         const AVPixFmtDescriptor* descriptor=av_pix_fmt_desc_get(source);
         if(!descriptor) throw std::runtime_error("Unknown video pixel format");
         const bool rgbSource=descriptor->flags & AV_PIX_FMT_FLAG_RGB;
-        const int matrix=frame->colorspace==AVCOL_SPC_BT709 ? SWS_CS_ITU709 :
-            frame->colorspace==AVCOL_SPC_BT2020_NCL ? SWS_CS_BT2020 :
-            frame->colorspace==AVCOL_SPC_UNSPECIFIED && frame->height>=720 ? SWS_CS_ITU709 : SWS_CS_ITU601;
+        const int matrix=f->colorspace==AVCOL_SPC_BT709 ? SWS_CS_ITU709 :
+            f->colorspace==AVCOL_SPC_BT2020_NCL ? SWS_CS_BT2020 :
+            f->colorspace==AVCOL_SPC_UNSPECIFIED && f->height>=720 ? SWS_CS_ITU709 : SWS_CS_ITU601;
         result.matrix=matrix==SWS_CS_ITU709 ? VideoMatrix::Bt709 : matrix==SWS_CS_BT2020 ? VideoMatrix::Bt2020 : VideoMatrix::Bt601;
-        result.fullRange=!rgbSource && (frame->color_range==AVCOL_RANGE_JPEG || source==AV_PIX_FMT_YUVJ420P);
+        result.fullRange=!rgbSource && (f->color_range==AVCOL_RANGE_JPEG || source==AV_PIX_FMT_YUVJ420P);
         const int chromaHeight=(result.height+1)/2;
         const size_t lumaBytes=size_t(result.stride)*result.height, chromaBytes=size_t(result.chromaStride)*chromaHeight;
         result.pixels.resize(lumaBytes+2*chromaBytes);
         uint8_t* planes[]={result.pixels.data(),result.pixels.data()+lumaBytes,result.pixels.data()+lumaBytes+chromaBytes,nullptr};
         int strides[]={result.stride,result.chromaStride,result.chromaStride,0};
-        if((source==AV_PIX_FMT_YUV420P || source==AV_PIX_FMT_YUVJ420P) && frame->width==result.width && frame->height==result.height) {
-            av_image_copy_plane(planes[0],strides[0],frame->data[0],frame->linesize[0],result.width,result.height);
-            av_image_copy_plane(planes[1],strides[1],frame->data[1],frame->linesize[1],result.chromaStride,chromaHeight);
-            av_image_copy_plane(planes[2],strides[2],frame->data[2],frame->linesize[2],result.chromaStride,chromaHeight);
+        if((source==AV_PIX_FMT_YUV420P || source==AV_PIX_FMT_YUVJ420P) && f->width==result.width && f->height==result.height) {
+            av_image_copy_plane(planes[0],strides[0],f->data[0],f->linesize[0],result.width,result.height);
+            av_image_copy_plane(planes[1],strides[1],f->data[1],f->linesize[1],result.chromaStride,chromaHeight);
+            av_image_copy_plane(planes[2],strides[2],f->data[2],f->linesize[2],result.chromaStride,chromaHeight);
             return result;
         }
-        scaler=sws_getCachedContext(scaler,frame->width,frame->height,source,result.width,result.height,AV_PIX_FMT_YUV420P,SWS_BILINEAR,nullptr,nullptr,nullptr);
+        scaler=sws_getCachedContext(scaler,f->width,f->height,source,result.width,result.height,AV_PIX_FMT_YUV420P,SWS_BILINEAR,nullptr,nullptr,nullptr);
         if(!scaler) throw std::runtime_error("Video color converter allocation failed");
         const auto coefficients=sws_getCoefficients(matrix);
         checked(sws_setColorspaceDetails(scaler,coefficients,rgbSource ? 1 : int(result.fullRange),coefficients,result.fullRange,0,1<<16,1<<16),"Video colorspace");
-        checked(sws_scale(scaler,frame->data,frame->linesize,0,frame->height,planes,strides),"Convert video");
+        checked(sws_scale(scaler,f->data,f->linesize,0,f->height,planes,strides),"Convert video");
         return result;
     }
+    // If hardware decoding fails (or ends) before its first frame, reopen the clip in software.
     std::optional<VideoFrame> next() {
+        try {
+            auto result=decode();
+            if(result || !hardware || delivered) {if(result) delivered=true;return result;}
+            logWarn("video: hardware HEVC decoding produced no frames; using software for "+path.filename().string());
+        } catch(const std::exception& e) {
+            if(!hardware || delivered || interrupted()) throw;
+            logWarn(std::string("video: hardware HEVC decoding failed (")+e.what()+"); using software for "+path.filename().string());
+        }
+        release();open(false);
+        return next();
+    }
+    std::optional<VideoFrame> decode() {
         start(); if(eof) return std::nullopt;
         for(;;) {
             check();
@@ -243,15 +317,16 @@ struct VideoDecoder::Impl {
         }
     }
 };
-VideoDecoder::VideoDecoder(const std::filesystem::path& file,std::function<bool()> cancelled) : impl_(std::make_unique<Impl>()) {
-    impl_->cancelled=std::move(cancelled);impl_->open(file);
+VideoDecoder::VideoDecoder(const std::filesystem::path& file,std::function<bool()> cancelled,VideoDecoderOptions options) : impl_(std::make_unique<Impl>()) {
+    impl_->cancelled=std::move(cancelled);impl_->path=file;impl_->options=options;impl_->open(options.hardware);
 }
+bool VideoDecoder::hardwareActive() const { return impl_->hardware; }
 VideoDecoder::~VideoDecoder()=default;
 std::optional<VideoFrame> VideoDecoder::next() { return impl_->next(); }
 void VideoDecoder::rewind() {
     auto& p=*impl_;p.start(); auto stream=p.format->streams[p.stream];
     checked(av_seek_frame(p.format,p.stream,stream->start_time==AV_NOPTS_VALUE?0:stream->start_time,AVSEEK_FLAG_BACKWARD),"Rewind video");
-    avcodec_flush_buffers(p.codec);av_packet_unref(p.packet);av_frame_unref(p.frame);
+    avcodec_flush_buffers(p.codec);av_packet_unref(p.packet);av_frame_unref(p.frame);av_frame_unref(p.downloaded);
     p.timestamps.reset();p.packetPending=false;p.draining=false;p.eof=false;
 }
 }

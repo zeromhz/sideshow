@@ -57,11 +57,23 @@ mode = "milkdrop" # milkdrop | fluid | video
 root = "/opt/sideshow/videos"
 preset = ""      # first usable clip, recursively sorted
 end = "loop"
+hardware_decode = true  # HEVC on the Pi 5's hardware decoder when available
 ```
 
 ## Media and resource limits
 
-Use progressive SDR H.264 MP4 at 720p or 1080p as a starting point. HDR and interlaced
+On a Raspberry Pi 5, prefer 8-bit HEVC (H.265): the Pi 5 decodes HEVC in hardware but has no
+H.264 decoder, so H.264 is decoded on the CPU. With `hardware_decode = true` (the default) the
+player uses the hardware decoder through Raspberry Pi OS's FFmpeg, copies each decoded frame
+into memory, and continues as for software decoding. If the hardware decoder is unavailable, or
+fails before a clip's first frame, that clip is decoded in software instead. The log says which
+was used for each HEVC clip (`video: hardware HEVC decoding for clip.mp4`). To convert a clip:
+
+```sh
+ffmpeg -i clip.mov -c:v libx265 -crf 22 -pix_fmt yuv420p -tag:v hvc1 -an clip-hevc.mp4
+```
+
+Otherwise, use progressive SDR H.264 MP4 at 720p or 1080p as a starting point. HDR and interlaced
 media are rejected. Source dimensions must be at most 4096 per axis and 8,847,360
 pixels. Frames larger than a 1920×1080 landscape or 1080×1920 portrait box are scaled down to
 fit it. Frames reach the GPU as 8-bit planar YUV 4:2:0: 8-bit 4:2:0 footage within the box is
