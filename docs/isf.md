@@ -8,8 +8,10 @@ are supported. Video effects, transitions and dynamic image inputs are not suppo
 Setup installs three original MIT-licensed examples, preserving existing files:
 `examples/plasma.fs` (speed and tint), `examples/spectrum.fs` (microphone spectrum
 and gain), and `examples/feedback.fs` (persistent trails, decay and reset event).
-It also installs three fractal generators: `fractal/julia.fs`, `fractal/dive.fs` and
-`fractal/kleinian.fs`. Their parameters are listed in the [README](../README.md#fractals).
+It also installs nine fractal generators: `fractal/julia.fs`, `fractal/dive.fs`,
+`fractal/kleinian.fs`, `fractal/phoenix.fs`, `fractal/nova.fs`, `fractal/newton.fs`,
+`fractal/burning_ship.fs`, `fractal/multibrot.fs` and `fractal/nebula.fs`. Their parameters
+are listed in the [README](../README.md#fractals).
 
 ```sh
 python3 tools/osc_send.py --host 127.0.0.1 mode isf

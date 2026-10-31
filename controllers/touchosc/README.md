@@ -25,6 +25,10 @@ The slider beside Video controls sends `/sideshow/<target>/fluid_persistence`, w
 
 The Pi must run the player version containing this command. Older builds ignore it. Set `persistence = 4.0` inside the existing `[fluid]` section of `/etc/sideshow/config.toml` and restart `sideshow-player` to make 4× the boot default. Runtime OSC changes do not save to disk.
 
+## Fractals panel
+
+**Fractals panel**, at the bottom of the ISF card, opens a panel over the control cards. The target, Ping, and command replies stay visible. Each shader button sends `mode isf` and then `preset fractal/<name>.fs`, and **Rotate all** sends `mode isf` and then `playlist fractal`. Both outcomes are shown side by side, as with the Fluid shortcuts. The Speed (0–4), Zoom (0.5–4), Color (0–1), and Detail (0–1) sliders send `isf_param` floats to the selected shader, at most about 29 messages per second each. Like the other sliders, they show local values, not panel state. Use the ISF parameter fields for `spin`, `weave`, `power`, `density`, and `reactivity`. **Close** returns to the main controls. The panel needs a player with the fractal shaders installed (`setup/install_isf_examples.sh`).
+
 ## Other controls
 
 Fluid shortcuts select Fluid mode and a style, including Pompeii (electric blue, violet, and magenta). Lock stops automatic style rotation; it does not freeze animation. Set `locked = true` in the Pi config’s `[presets]` section to start locked; Unlock resumes rotation. Video Pause affects video only. Blackout hides output while rendering continues. ISF controls require an active shader and its input names; select the correct numeric type, especially integer/bool.
@@ -40,4 +44,4 @@ python3 controllers/touchosc/build_layout.py
 lua controllers/touchosc/test_controller.lua
 ```
 
-The generator requires only Python’s standard library. The layout was opened in TouchOSC 1.5.3; automated Lua tests cover request envelopes, typed arguments, correlation, duplicate/late/out-of-order replies, partial broadcasts, timeout reporting, both Fluid shortcut outcomes, reply-port editing, persistence coalescing, and target changes. The expanded acknowledgement UI has not yet been visually validated in TouchOSC. Player tests cover config, command validation, mode retention, and actual GPU dye fading. Raspberry Pi performance and live network behavior still need verification on the device.
+The generator requires only Python’s standard library. The layout was opened in TouchOSC 1.5.3; automated Lua tests cover request envelopes, typed arguments, correlation, duplicate/late/out-of-order replies, partial broadcasts, timeout reporting, both Fluid shortcut outcomes, Fractals panel shortcuts and slider coalescing, reply-port editing, persistence coalescing, and target changes. The expanded acknowledgement UI and the Fractals panel have not yet been visually validated in TouchOSC. Player tests cover config, command validation, mode retention, and actual GPU dye fading. Raspberry Pi performance and live network behavior still need verification on the device.

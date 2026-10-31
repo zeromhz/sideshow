@@ -102,7 +102,7 @@ Set `[visuals] mode = "isf"` for ISF startup. `[isf]` accepts `root` (default
 `max_width` (1280) and `max_height` (720). Dimensions must be integers 1–4096;
 invalid values warn and retain defaults. Portrait swaps the caps. Development
 setup uses `deps/isf` and `examples/plasma.fs`. To boot into a fractal, set
-`preset = "fractal/julia.fs"` (or `fractal/dive.fs`, `fractal/kleinian.fs`). Restart after config or catalog
+`preset = "fractal/julia.fs"` (or any other shader in the `fractal` folder, such as `fractal/nova.fs`). Restart after config or catalog
 changes. See [ISF controls, defaults and limits](isf.md).
 
 Fluid persistence scales each style’s dye lifetime without changing its motion, splash timing, preset rotation, or rendering frequency. `1` preserves the original look; `4` gives approximately four times longer fading. OSC `/sideshow/<panel-id-or-all>/fluid_persistence` accepts one finite number from 1 to 10; invalid values are ignored. Runtime changes survive style/mode switches but reset to the TOML value on restart.

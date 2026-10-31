@@ -76,7 +76,7 @@ void main(){gl_FragColor=vec4(IMG_PIXEL(fft,vec2(32.5,0.5)).r,0,0,1);})");
  if(std::string(name)=="spectrum.fs"){IsfAudio sine;std::vector<float> pcm(2048);for(int n=0;n<1024;++n)pcm[n*2]=std::sin(2*3.141592653589793*32*n/1024);sine.append(pcm.data(),1024);r.draw(p,sine,.1,.1,1);requireIsf(energy()>initial,"bundled spectrum did not react to sine");}
  if(std::string(name)=="feedback.fs"){r.draw(p,audio,0,0,1);requireIsf(energy()>initial,"bundled feedback did not retain history");std::string why;p.trigger("reset",why);r.draw(p,audio,0,0,2);requireIsf(energy()==initial,"bundled feedback reset failed");}
  }
- for(const char* name:{"julia.fs","dive.fs","kleinian.fs"}) {
+ for(const char* name:{"julia.fs","dive.fs","kleinian.fs","phoenix.fs","nova.fs","newton.fs","burning_ship.fs","multibrot.fs","nebula.fs"}) {
  std::ifstream input(std::string(ISF_ASSET_DIR)+"/fractal/"+name);requireIsf(bool(input),"bundled fractal missing");std::string text{std::istreambuf_iterator<char>(input),{}};auto s=source(text);
  IsfAudio loud;std::vector<float> pcm(4096);for(int n=0;n<2048;++n)pcm[n*2]=pcm[n*2+1]=.5f*float(std::sin(2*3.141592653589793*120*n/48000.0));loud.append(pcm.data(),2048);
  // Run 20 frames at the 0.1 s step limit so the integrated animation state visibly advances.
