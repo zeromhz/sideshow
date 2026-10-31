@@ -96,7 +96,13 @@ struct FluidRenderer::Impl {
     }
     void render(float dt,const FluidPreset& p,const std::vector<FluidSplat>& splats,float persistence) {
         auto& f=*fields;
-        dt=std::isfinite(dt)?std::clamp(dt,0.0f,1.0f/60):0;
+        // The simulation steps at most 1/60 s at a time, as the reference simulation does: one
+        // larger step strengthens the explicit vorticity force and blurs the dye less, which
+        // visibly changes the look. At the 30 fps ceiling that is two substeps per frame. Longer
+        // stalls are capped at two substeps, so a hitch slows the fluid instead of jolting it.
+        dt=std::isfinite(dt)?std::clamp(dt,0.0f,2.0f/60):0;
+        const int substeps=dt>1.0f/60+1e-4f?2:1;
+        const float step=dt/substeps;
         const float aspect=static_cast<float>(width)/height;
         for(const auto& s:splats) {
             begin(splat,f.velocity.read);splat.one("aspectRatio",aspect);splat.two("point",s.x,s.y);
@@ -109,18 +115,20 @@ struct FluidRenderer::Impl {
             splat.three("color",s.color.r*1.5f,s.color.g*1.5f,s.color.b*1.5f);
             draw(f.dye.write);f.dye.swap();
         }
-        begin(curl,f.velocity.read);curl.texture("uVelocity",f.velocity.read.texture,0);draw(f.curl);
-        begin(vorticity,f.velocity.read);vorticity.texture("uVelocity",f.velocity.read.texture,0);vorticity.texture("uCurl",f.curl.texture,1);
-        vorticity.one("curl",p.curl);vorticity.one("dt",dt);draw(f.velocity.write);f.velocity.swap();
-        begin(divergence,f.velocity.read);divergence.texture("uVelocity",f.velocity.read.texture,0);draw(f.divergence);
-        begin(clear,f.pressure.read);clear.texture("uTexture",f.pressure.read.texture,0);clear.one("value",p.pressure);draw(f.pressure.write);f.pressure.swap();
-        begin(pressure,f.velocity.read);pressure.texture("uDivergence",f.divergence.texture,0);
-        for(int i=0;i<p.pressureIterations;++i){pressure.texture("uPressure",f.pressure.read.texture,1);draw(f.pressure.write);f.pressure.swap();}
-        begin(gradient,f.velocity.read);gradient.texture("uPressure",f.pressure.read.texture,0);gradient.texture("uVelocity",f.velocity.read.texture,1);draw(f.velocity.write);f.velocity.swap();
-        begin(advection,f.velocity.read);advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.velocity.read.texture,0);
-        advection.two("dyeTexelSize",1.0f/f.velocity.read.width,1.0f/f.velocity.read.height);advection.one("dt",dt);advection.one("dissipation",p.velocityDissipation);draw(f.velocity.write);f.velocity.swap();
-        advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.dye.read.texture,1);
-        advection.two("dyeTexelSize",1.0f/f.dye.read.width,1.0f/f.dye.read.height);advection.one("dissipation",p.densityDissipation / (std::isfinite(persistence) ? std::clamp(persistence,1.0f,10.0f) : 1.0f));draw(f.dye.write);f.dye.swap();
+        for(int sub=0;sub<substeps;++sub) {
+            begin(curl,f.velocity.read);curl.texture("uVelocity",f.velocity.read.texture,0);draw(f.curl);
+            begin(vorticity,f.velocity.read);vorticity.texture("uVelocity",f.velocity.read.texture,0);vorticity.texture("uCurl",f.curl.texture,1);
+            vorticity.one("curl",p.curl);vorticity.one("dt",step);draw(f.velocity.write);f.velocity.swap();
+            begin(divergence,f.velocity.read);divergence.texture("uVelocity",f.velocity.read.texture,0);draw(f.divergence);
+            begin(clear,f.pressure.read);clear.texture("uTexture",f.pressure.read.texture,0);clear.one("value",p.pressure);draw(f.pressure.write);f.pressure.swap();
+            begin(pressure,f.velocity.read);pressure.texture("uDivergence",f.divergence.texture,0);
+            for(int i=0;i<p.pressureIterations;++i){pressure.texture("uPressure",f.pressure.read.texture,1);draw(f.pressure.write);f.pressure.swap();}
+            begin(gradient,f.velocity.read);gradient.texture("uPressure",f.pressure.read.texture,0);gradient.texture("uVelocity",f.velocity.read.texture,1);draw(f.velocity.write);f.velocity.swap();
+            begin(advection,f.velocity.read);advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.velocity.read.texture,0);
+            advection.two("dyeTexelSize",1.0f/f.velocity.read.width,1.0f/f.velocity.read.height);advection.one("dt",step);advection.one("dissipation",p.velocityDissipation);draw(f.velocity.write);f.velocity.swap();
+            advection.texture("uVelocity",f.velocity.read.texture,0);advection.texture("uSource",f.dye.read.texture,1);
+            advection.two("dyeTexelSize",1.0f/f.dye.read.width,1.0f/f.dye.read.height);advection.one("dissipation",p.densityDissipation / (std::isfinite(persistence) ? std::clamp(persistence,1.0f,10.0f) : 1.0f));draw(f.dye.write);f.dye.swap();
+        }
         if(p.bloom) {
             begin(prefilter,f.dye.read);prefilter.texture("uTexture",f.dye.read.texture,0);
             float knee=p.bloomThreshold*p.bloomSoftKnee+.0001f;
