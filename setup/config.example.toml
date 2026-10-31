@@ -8,7 +8,7 @@ width = 0                      # 0 = automatic: the screen's native mode, capped
 height = 0                     # set both (e.g. 1920 x 1080) to force a mode
 max_width = 2560               # automatic mode never exceeds this (4K screens step down)
 max_height = 1440
-fps = 60
+fps = 30                       # frame-rate ceiling, 1..30
 fullscreen = true
 
 [audio]
@@ -28,6 +28,7 @@ hardcut_enabled = false        # beat-triggered abrupt cuts
 beat_sensitivity = 1.0         # 0..2
 shuffle = true
 locked = false                # true holds the startup preset; OSC Unlock resumes rotation
+render_scale = 0.6667          # MilkDrop renders at this fraction of the screen size, then scales up
 
 [output]
 master_default = 1.0           # brightness at boot, before any OSC master arrives

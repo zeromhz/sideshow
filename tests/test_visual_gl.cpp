@@ -3,11 +3,15 @@
 #include "fluid_renderer.h"
 #include "fluid_backend.h"
 #include "milkdrop_backend.h"
+#include "renderer.h"
 #include "visual_controller.h"
 #include "brightness_pass.h"
 #include "fluid_motion.h"
 #include "gl.h"
 #include "fluid_shaders.h"
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -179,6 +183,44 @@ int main() {
         std::vector<unsigned char> lit(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,lit.data());
         size_t sum=0;for(size_t i=0;i<lit.size();i+=4)sum+=lit[i]+lit[i+1]+lit[i+2];
         require(sum>1000,"Fluid did not return after blackout");
+        {
+            // MilkDrop render scale: a preset whose composite paints a uv gradient must fill the
+            // whole screen when rendered at half size, and match the full-size render.
+            const char* path="/tmp/sideshow_gradient_test.milk";
+            {std::ofstream milk(path);milk<<"MILKDROP_PRESET_VERSION=201\nPSVERSION=2\nPSVERSION_WARP=2\nPSVERSION_COMP=2\n[preset00]\n"
+                "comp_1=`shader_body\ncomp_2=`{\ncomp_3=`ret = float3(uv.x, uv.y, 0.5);\ncomp_4=`}\n";}
+            auto capture=[&](double scale,int w,int h,sideshow::RenderSize& internal){
+                sideshow::Config::Presets presets;presets.renderScale=scale;presets.textures="/nonexistent";
+                sideshow::Renderer milkdrop(w,h,30,presets);
+                milkdrop.renderFrame();  // projectM finishes initializing on its first frame
+                projectm_load_preset_file(milkdrop.handle(),path,false);
+                for(int i=0;i<5;++i) milkdrop.renderFrame();
+                internal=milkdrop.internalSize();
+                std::vector<unsigned char> px(size_t(w)*h*4);glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,px.data());
+                require(glGetError()==GL_NO_ERROR,"GL error during scaled MilkDrop render");
+                return px;};
+            sideshow::RenderSize full{},half{};
+            auto scaled=capture(0.5,320,180,half);auto direct=capture(1.0,320,180,full);
+            require(full.width==320&&full.height==180,"Scale 1 did not render at screen size");
+            require(half.width==160&&half.height==90,"Scale 0.5 did not halve the render size");
+            auto at=[](const std::vector<unsigned char>& px,int x,int y,int c){return int(px[(size_t(y)*320+x)*4+c]);};
+            // The gradient must span the full screen: red runs across, green runs up or down.
+            require(std::abs(at(scaled,316,90,0)-at(scaled,3,90,0))>200,"Scaled frame does not span the screen width");
+            require(std::abs(at(scaled,160,176,1)-at(scaled,160,3,1))>150,"Scaled frame does not span the screen height");
+            int worst=0;
+            for(int y=4;y<180;y+=16)for(int x=4;x<320;x+=16)for(int c=0;c<3;++c)
+                worst=std::max(worst,std::abs(at(scaled,x,y,c)-at(direct,x,y,c)));
+            require(worst<=24,"Scaled frame differs from the full-size render");
+            // Resizing to another aspect ratio keeps the scale and still fills the screen.
+            sideshow::Config::Presets presets;presets.renderScale=2.0/3.0;presets.textures="/nonexistent";
+            sideshow::Renderer milkdrop(320,180,30,presets);
+            milkdrop.resize(180,320);
+            require(milkdrop.internalSize().width==120&&milkdrop.internalSize().height==213,"Resize lost the render scale");
+            milkdrop.resize(320,180);milkdrop.renderFrame();
+            require(milkdrop.internalSize().width==213&&milkdrop.internalSize().height==120,"Resize back lost the render scale");
+            require(glGetError()==GL_NO_ERROR,"GL error after scaled MilkDrop resize");
+            std::remove(path);
+        }
     } catch(const std::exception& e) {std::cerr << e.what() << '\n';result=1;}
     SDL_GL_DeleteContext(context);SDL_DestroyWindow(window);SDL_Quit();return result;
 }

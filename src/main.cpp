@@ -97,7 +97,12 @@ int main(int argc, char** argv) {
         OscServer osc(config.osc.port, config.panelId, commands, status);
 
         AudioFeed audioFeed(projectm_pcm_get_max_samples());
-        const Uint32 frameBudgetMs = 1000 / static_cast<Uint32>(std::max(1, config.display.fps));
+        // Frame-rate ceiling on an absolute schedule: frames start at most every 1/fps seconds,
+        // so the average never exceeds display.fps even when vsync runs faster. A late frame
+        // does not cause a burst to catch up.
+        const Uint64 counterRate = SDL_GetPerformanceFrequency();
+        const Uint64 framePeriod = counterRate / static_cast<Uint64>(std::max(1, config.display.fps));
+        Uint64 nextFrame = SDL_GetPerformanceCounter() + framePeriod;
         Uint32 lastTicks = SDL_GetTicks();
         Uint32 fpsWindowStart = lastTicks;
         int framesInWindow = 0;
@@ -156,8 +161,16 @@ int main(int argc, char** argv) {
                 framesInWindow = 0;
             }
 
-            const Uint32 frameTime = SDL_GetTicks() - now;
-            if (frameTime < frameBudgetMs) SDL_Delay(frameBudgetMs - frameTime);
+            Uint64 counter = SDL_GetPerformanceCounter();
+            if (counter < nextFrame) {
+                // SDL_Delay has millisecond resolution: sleep the whole milliseconds, then yield
+                // until the deadline.
+                const Uint64 wait = (nextFrame - counter) * 1000 / counterRate;
+                if (wait > 0) SDL_Delay(static_cast<Uint32>(wait));
+                while ((counter = SDL_GetPerformanceCounter()) < nextFrame) SDL_Delay(0);
+            }
+            nextFrame += framePeriod;
+            if (nextFrame < counter) nextFrame = counter;
         }
     } catch (const std::exception& e) {
         logError(e.what());

@@ -44,6 +44,11 @@ Notes:
   (a 4K screen steps down to 1440p or 1080p), preferring 60 Hz. The chosen mode is logged
   (`screen native …, using …`). Change `max_width`/`max_height`, or set `width`/`height`, in
   the config to override.
+- MilkDrop renders at 2/3 of the screen's width and height and is stretched to fill the screen
+  (1920×1080 renders at 1280×720; 2560×1440 at 1707×960). The size is logged
+  (`MilkDrop render …`). Set `[presets] render_scale` (0.25–1) to change it.
+- Frame rate is capped at 30 fps (`[display] fps`, 1–30). On a 60 Hz screen each frame is held
+  for exactly two refreshes.
 - If no screen is detected at boot, the player exits and systemd retries every 2 s, so visuals
   appear shortly after the screen is powered on.
 - The tty1 login prompt is disabled; use SSH.
@@ -136,7 +141,7 @@ Run this on each new panel, and after any significant change:
 
 - [ ] Power on with no keyboard or network: visuals appear within ~20 s, with no boot text or cursor
 - [ ] Visuals react to clapping and music near the mic
-- [ ] `tools/osc_send.py ping` lists the panel at ~60 fps
+- [ ] `tools/osc_send.py ping` lists the panel at ~30 fps
 - [ ] Every OSC command in the table works, both via `--panel <id>` and via broadcast `all`
 - [ ] The VDMX fader fades smoothly to black and back, with no visible stepping
 - [ ] Unplug the mic: visuals keep running (on silence). Replug: reaction returns within ~3 s
@@ -226,4 +231,4 @@ tools/osc_send.py isf_param speed 2.0
 In the TouchOSC layout, **Fractals panel** (in the ISF card) opens buttons for each shader
 and sliders for `speed`, `zoom`, `color` and `detail`. The ISF parameter fields send the rest
 as floats. Dive costs the most GPU time.
-If a panel drops below 60 fps, lower `detail` or the `[isf]` resolution cap.
+If a panel drops below 30 fps, lower `detail` or the `[isf]` resolution cap.

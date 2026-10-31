@@ -18,7 +18,7 @@ The [example config](../setup/config.example.toml) is a copyable starting point.
 | `display.height` | `0` | Integer 0–4320 |
 | `display.max_width` | `2560` | Integer 320–7680; automatic fullscreen selection cap |
 | `display.max_height` | `1440` | Integer 240–4320; automatic fullscreen selection cap |
-| `display.fps` | `60` | Integer 1–240; requested projectM FPS and loop pacing |
+| `display.fps` | `30` | Integer 1–30; frame-rate ceiling for every mode. Values above 30 (such as an older `fps = 60`) warn and use 30. On a 60 Hz screen at 30 fps each frame is held for two refreshes |
 | `display.fullscreen` | `true` | Boolean; false creates a resizable development window |
 
 An unsupported explicit fullscreen size falls back to automatic selection. Automatic
@@ -52,6 +52,7 @@ alone does not change the machine hostname.
 | `presets.beat_sensitivity` | `1.0` | 0–2 |
 | `presets.shuffle` | `true` | Boolean; random order when true, sequential when false |
 | `presets.locked` | `false` | Boolean; start with automatic preset rotation locked; OSC Unlock resumes |
+| `presets.render_scale` | `0.6667` | 0.25–1. MilkDrop renders at this fraction of the screen's width and height (same aspect ratio), then the frame is stretched to fill the screen. The screen stays at its native resolution. 2/3 turns 1920×1080 into a 1280×720 render; 1.0 renders at full size |
 
 Nonempty paths are accepted without checking existence during config parsing. The catalog
 scans at startup; restart after adding presets or playlists.

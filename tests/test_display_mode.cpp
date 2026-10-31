@@ -74,3 +74,38 @@ TEST_CASE("Exact mode lookup finds the size with the best refresh rate") {
     CHECK(modes[*index].refreshRate == 60);
     CHECK_FALSE(findExactMode(modes, 1234, 567));
 }
+
+TEST_CASE("scaledRenderSize keeps the aspect ratio at the requested fraction") {
+    auto s = scaledRenderSize(1920, 1080, 2.0 / 3.0);
+    CHECK(s.width == 1280);
+    CHECK(s.height == 720);
+    s = scaledRenderSize(2560, 1440, 2.0 / 3.0);
+    CHECK(s.width == 1707);
+    CHECK(s.height == 960);
+    s = scaledRenderSize(1080, 1920, 2.0 / 3.0);  // portrait
+    CHECK(s.width == 720);
+    CHECK(s.height == 1280);
+    s = scaledRenderSize(1920, 1200, 0.5);
+    CHECK(s.width == 960);
+    CHECK(s.height == 600);
+    s = scaledRenderSize(1920, 1080, 1.0);
+    CHECK(s.width == 1920);
+    CHECK(s.height == 1080);
+    s = scaledRenderSize(1, 1, 0.25);  // never empty
+    CHECK(s.width == 1);
+    CHECK(s.height == 1);
+    s = scaledRenderSize(1280, 720, 0.0);  // invalid scale renders at full size
+    CHECK(s.width == 1280);
+    CHECK(s.height == 720);
+}
+
+TEST_CASE("swapIntervalFor shows each frame for whole refreshes without undershooting") {
+    CHECK(swapIntervalFor(60, 30) == 2);
+    CHECK(swapIntervalFor(59, 30) == 2);  // 59.94 Hz reported as 59
+    CHECK(swapIntervalFor(50, 30) == 1);  // limiter caps 50 down to 30
+    CHECK(swapIntervalFor(120, 30) == 4);
+    CHECK(swapIntervalFor(60, 60) == 1);
+    CHECK(swapIntervalFor(30, 30) == 1);
+    CHECK(swapIntervalFor(24, 30) == 1);
+    CHECK(swapIntervalFor(0, 30) == 1);   // unknown refresh
+}

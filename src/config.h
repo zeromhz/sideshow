@@ -16,7 +16,7 @@ struct Config {
         int height = 0;
         int maxWidth = 2560;   // cap for automatic selection
         int maxHeight = 1440;
-        int fps = 60;
+        int fps = 30;          // frame-rate ceiling, 1-30
         bool fullscreen = true;
     } display;
 
@@ -39,6 +39,7 @@ struct Config {
         float beatSensitivity = 1.0f;
         bool shuffle = true;
         bool locked = false;
+        double renderScale = 2.0 / 3.0;  // MilkDrop internal size relative to the screen
     } presets;
 
     struct Visuals { VisualMode mode = VisualMode::Milkdrop; } visuals;
