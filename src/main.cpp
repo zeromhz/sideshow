@@ -198,16 +198,15 @@ int main(int argc, char** argv) {
             logInfo("frame pacing: each frame held for " + std::to_string(holdRefreshes) +
                     " refreshes at " + std::to_string(refresh) + " Hz");
         }
+        // One sleep, no spinning: Linux typically wakes within tens of microseconds, well inside
+        // the 1.5 ms vblank margin, and spinning the last 0.3 ms cost ~2% of a core.
         auto waitUntil = [counterRate](Uint64 deadline) {
             Uint64 counter = SDL_GetPerformanceCounter();
-            if (counter >= deadline) return counter;
-            // Sleep to within 0.3 ms of the deadline, then yield the rest.
-            const Uint64 slack = counterRate * 3 / 10000;
-            if (deadline - counter > slack) {
+            if (counter < deadline) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(
-                    (deadline - counter - slack) * 1000000000ull / counterRate));
+                    (deadline - counter) * 1000000000ull / counterRate));
+                counter = SDL_GetPerformanceCounter();
             }
-            while ((counter = SDL_GetPerformanceCounter()) < deadline) std::this_thread::yield();
             return counter;
         };
         Uint64 nextFrame = SDL_GetPerformanceCounter() + framePeriod;

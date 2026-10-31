@@ -298,3 +298,23 @@ TEST_CASE("Destroying the preset manager disconnects automatic switch requests")
     f.renderer.requestSwitch(true);
     CHECK(f.renderer.attempts.size() == attempts);
 }
+
+// Returning to MilkDrop must not load a random preset before the remembered one.
+TEST_CASE("Starting at a remembered preset loads only that preset") {
+    for (bool shuffle : {false, true}) {
+        Fixture f;
+        sideshow::PresetCatalog catalog(f.root);
+        sideshow::PresetManager manager(&f.renderer, catalog, shuffle);
+        CHECK(manager.start("default", "d.milk"));
+        CHECK(manager.currentPreset() == "d.milk");
+        REQUIRE(f.renderer.attempts.size() == 1);
+        // Navigation continues from it within the playlist.
+        manager.next();
+        if (!shuffle) CHECK(manager.currentPreset() == "a.milk");
+    }
+    Fixture f;
+    sideshow::PresetCatalog catalog(f.root);
+    sideshow::PresetManager manager(&f.renderer, catalog, false);
+    CHECK_FALSE(manager.start("default", "missing.milk"));  // not in the playlist: caller loads it
+    CHECK(manager.currentPreset() == "a.milk");
+}
