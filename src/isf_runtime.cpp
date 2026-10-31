@@ -5,15 +5,42 @@
 #include "ISFPassTarget.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <optional>
 #include <stdexcept>
 namespace sideshow {
 namespace {
+// 32-bit float textures can only be sampled with linear filtering where the driver supports
+// OES_texture_float_linear. The Pi's V3D driver does not: an RGBA32F texture with GL_LINEAR (how
+// VVGL creates float textures) is incomplete there and samples as zero, which silenced every
+// shader's audio input and blacked out FLOAT passes. Where it is missing, float targets and audio
+// textures use RGBA16F instead, which V3D filters. SIDESHOW_ISF_HALF_FLOAT=1 forces this (tests).
+bool halfFloatTargets(){
+ static const bool unsupported=[]{GLint n=0;glGetIntegerv(GL_NUM_EXTENSIONS,&n);
+  for(GLint i=0;i<n;++i){auto e=reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS,GLuint(i)));if(e&&std::strcmp(e,"GL_OES_texture_float_linear")==0)return false;}
+  return true;}();
+ const char* forced=std::getenv("SIDESHOW_ISF_HALF_FLOAT");
+ return unsupported||(forced&&std::strcmp(forced,"1")==0);
+}
+VVGL::GLBufferRef createHalfFloatTex(const VVGL::Size& size,const VVGL::GLBufferPoolRef& pool){
+ VVGL::GLBuffer::Descriptor desc;
+ desc.type=VVGL::GLBuffer::Type_Tex;desc.target=VVGL::GLBuffer::Target_2D;
+ desc.internalFormat=static_cast<VVGL::GLBuffer::InternalFormat>(GL_RGBA16F);
+ desc.pixelFormat=VVGL::GLBuffer::PF_RGBA;desc.pixelType=static_cast<VVGL::GLBuffer::PixelType>(GL_HALF_FLOAT);
+ desc.cpuBackingType=VVGL::GLBuffer::Backing_None;desc.gpuBackingType=VVGL::GLBuffer::Backing_Internal;
+ auto texture=pool->createBufferRef(desc,size,nullptr,VVGL::Size(),true);
+ if(texture)texture->parentBufferPool=pool;
+ return texture;
+}
 using namespace VVGL;using namespace VVISF;
 struct Guard {
  fluid_gl::StateGuard state;
  GLint active=0,unpack=0,pack=0,array=0,renderbuffer=0;
  std::array<GLint,4> pixel{};std::vector<GLint> textures,samplers;
- Guard(){glGetIntegerv(GL_ACTIVE_TEXTURE,&active);GLint n=0;glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&n);textures.resize(n);samplers.resize(n);
+ // units: how many texture units (from 0) the work inside may touch; 0 = all of them. VVISF
+ // assigns units from 0 upwards, so a shader needs at most imports + audio + passes + targets.
+ explicit Guard(int units=0){glGetIntegerv(GL_ACTIVE_TEXTURE,&active);GLint n=0;glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&n);if(units>0)n=std::min<GLint>(n,units);textures.resize(n);samplers.resize(n);
   for(int i=0;i<n;++i){glActiveTexture(GL_TEXTURE0+i);glGetIntegerv(GL_TEXTURE_BINDING_2D,&textures[i]);glGetIntegerv(GL_SAMPLER_BINDING,&samplers[i]);glBindSampler(i,0);}
   glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING,&unpack);glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING,&pack);glGetIntegerv(GL_ARRAY_BUFFER_BINDING,&array);glGetIntegerv(GL_RENDERBUFFER_BINDING,&renderbuffer);
   GLenum keys[]={GL_UNPACK_ALIGNMENT,GL_UNPACK_ROW_LENGTH,GL_UNPACK_SKIP_ROWS,GL_UNPACK_SKIP_PIXELS};for(int i=0;i<4;++i){glGetIntegerv(keys[i],&pixel[i]);glPixelStorei(keys[i],i==0?1:0);}
@@ -34,6 +61,9 @@ void checkGl(){auto e=glGetError();if(e==GL_OUT_OF_MEMORY)throw IsfFrameRejected
 std::runtime_error error(const ISFErr& e){std::string msg=e.general+": "+e.specific;for(const auto& d:e.details)if(d.first.find("ErrLog")!=std::string::npos)msg+="\n"+d.first+": "+d.second.substr(0,4096);return std::runtime_error(msg);}
 }
 struct IsfRuntime::Impl {
+ // Texture units a frame can touch; saving/restoring every unit the GPU has (96-192) cost
+ // thousands of GL calls per frame.
+ int units()const{return int(imports.size()+audio.size()+source->document.passes.size()+doc->persistentPassTargets().size()+doc->tempPassTargets().size()+1);}
  Pool pool;std::shared_ptr<const IsfSource> source;std::shared_ptr<HostScene> scene;VVISF::ISFDocRef doc;
  std::unique_ptr<IsfPresenter> presenter;std::map<std::string,IsfValue> defaults,committed;
  VVGL::GLBufferRef output;std::map<std::string,VVGL::GLBufferRef> imports,audio;
@@ -66,7 +96,7 @@ struct IsfRuntime::Impl {
  // they are drawn (replacement history) need clearing here. Skipping the others saves a
  // full-size clear per buffer per frame, which a tiled GPU flushes to memory as its own job.
  VVGL::GLBufferRef make(int w,int h,bool floating,bool clear=true){
-  auto texture=floating?VVGL::CreateRGBAFloatTex(VVGL::Size(w,h),true,pool.value):VVGL::CreateRGBATex(VVGL::Size(w,h),true,pool.value);
+  auto texture=floating?(halfFloatTargets()?createHalfFloatTex(VVGL::Size(w,h),pool.value):VVGL::CreateRGBAFloatTex(VVGL::Size(w,h),true,pool.value)):VVGL::CreateRGBATex(VVGL::Size(w,h),true,pool.value);
   auto fbo=VVGL::CreateFBO(true,pool.value);glBindFramebuffer(GL_FRAMEBUFFER,fbo->name);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,texture->name,0);
   if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw std::runtime_error("ISF requested texture format is not renderable");if(clear){const GLfloat black[]={0,0,0,0};glClearBufferfv(GL_COLOR,0,black);}checkGl();return texture;
  }
@@ -82,8 +112,9 @@ struct IsfRuntime::Impl {
   auto size=target->targetSize();return {int(size.width),int(size.height),target->floatFlag()};
  }
  void values(const std::map<std::string,IsfValue>& v){for(const auto& [name,value]:v)scene->setValueForInputNamed(runtimeValue(value),name);}
- bool update(const IsfParameters& parameters,int w,int h,std::string& failure,bool resetHistory=false){
-  if(w<=0||h<=0)return true;resetHistory=resetHistory&&!pendingCleared;Guard guard;auto before=snapshot();auto ts=targets();
+ // nested: called from draw(), which already holds a Guard.
+ bool update(const IsfParameters& parameters,int w,int h,std::string& failure,bool resetHistory=false,bool nested=false){
+  if(w<=0||h<=0)return true;resetHistory=resetHistory&&!pendingCleared;std::optional<Guard> guard;if(!nested)guard.emplace(units());auto before=snapshot();auto ts=targets();
   try{
    values(parameters.values());doc->evalBufferDimensionsWithRenderSize(VVGL::Size(w,h),false);
    bool resize=w!=width||h!=height;for(size_t n=0;n<ts.size();++n)resize=resize||ts[n]->targetSize()!=before.sizes[n];
@@ -118,8 +149,8 @@ IsfRuntime::~IsfRuntime(){Guard guard;impl_.reset();}
 const std::map<std::string,IsfValue>& IsfRuntime::defaults()const{return impl_->defaults;}
 bool IsfRuntime::update(const IsfParameters& p,int w,int h,std::string& error,bool resetHistory){return impl_->update(p,w,h,error,resetHistory);}
 void IsfRuntime::draw(const IsfParameters& p,const IsfAudio& a,double time,double delta,uint64_t frame){
- auto& r=*impl_;Guard guard;std::string failure;
- if(!r.update(p,r.width,r.height,failure,frame==0&&r.drawn&&!r.pendingCleared)){r.rollback();throw IsfFrameRejected(failure);}
+ auto& r=*impl_;Guard guard(r.units());std::string failure;
+ if(!r.update(p,r.width,r.height,failure,frame==0&&r.drawn&&!r.pendingCleared,true)){r.rollback();throw IsfFrameRejected(failure);}
  try{
   for(const auto& input:r.source->document.inputs){if(input.kind==IsfInputKind::Event){r.scene->setValueForInputNamed(VVISF::ISFEventVal(p.events().count(input.name)!=0),input.name);continue;}
    if(input.kind!=IsfInputKind::Audio&&input.kind!=IsfInputKind::AudioFFT)continue;auto samples=input.kind==IsfInputKind::Audio?a.waveform(input.audioWidth):a.spectrum(input.audioWidth);std::vector<float> rgba(samples.samples.size()*4);for(size_t i=0;i<samples.samples.size();++i){rgba[4*i]=rgba[4*i+1]=rgba[4*i+2]=samples.samples[i];rgba[4*i+3]=1;}
@@ -129,5 +160,6 @@ void IsfRuntime::draw(const IsfParameters& p,const IsfAudio& a,double time,doubl
  }catch(const VVISF::ISFErr& e){r.rollback();throw error(e);}catch(...){r.rollback();throw;}
  r.pool.value->housekeeping();
 }
-void IsfRuntime::present(int w,int h){Guard guard;impl_->presenter->present(impl_->output->name,impl_->outputWidth,impl_->outputHeight,w,h);checkGl();}
+void IsfRuntime::present(int w,int h){Guard guard(1);  // the presenter samples on unit 0
+ impl_->presenter->present(impl_->output->name,impl_->outputWidth,impl_->outputHeight,w,h);checkGl();}
 }

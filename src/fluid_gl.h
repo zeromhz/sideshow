@@ -3,6 +3,8 @@
 #include <string>
 #include <array>
 #include <utility>
+#include <vector>
+#include <cstring>
 namespace sideshow::fluid_gl {
 // Initialization must not disturb a retained backend, even when construction throws.
 class StateGuard {
@@ -24,12 +26,17 @@ public:
     ~Program();
     Program(const Program&)=delete;Program& operator=(const Program&)=delete;
     void use() const {glUseProgram(id_);}
-    GLint location(const char* n) const {return glGetUniformLocation(id_,n);}
+    // Locations are cached per name (callers pass string literals, so the pointer check
+    // usually hits); looking them up by name on every set cost ~150 calls per Fluid frame.
+    GLint location(const char* n) const {
+        for(const auto& e:locations_) if(e.first==n || std::strcmp(e.first,n)==0) return e.second;
+        GLint l=glGetUniformLocation(id_,n);locations_.emplace_back(n,l);return l;
+    }
     void one(const char* n,float v) const {glUniform1f(location(n),v);}
     void two(const char* n,float a,float b) const {glUniform2f(location(n),a,b);}
     void three(const char* n,float a,float b,float c) const {glUniform3f(location(n),a,b,c);}
     void texture(const char* n,GLuint texture,int unit) const;
-private: GLuint id_=0;
+private: GLuint id_=0;mutable std::vector<std::pair<const char*,GLint>> locations_;
 };
 class Target {
 public:
