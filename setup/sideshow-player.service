@@ -18,9 +18,16 @@ Environment=MESA_SHADER_CACHE_MAX_SIZE=2G
 # Run the CPU at full clock (the "+" runs this step as root). Raspberry Pi OS switches to the
 # ondemand governor during boot, which lets preset switches start at a low clock.
 ExecStartPre=+/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done'
+# A login prompt opened by Ctrl+Alt+Q (below) would compete for the screen; close it first.
+ExecStartPre=-+/bin/systemctl stop getty@tty1.service
 ExecStart=/opt/sideshow/bin/sideshow-player --config /etc/sideshow/config.toml
 Restart=always
 RestartSec=2
+# Ctrl+Alt+Q on a keyboard plugged into the Pi exits with status 80: stay stopped and open a
+# login prompt on the panel's screen (tty1's prompt is otherwise disabled by install.sh).
+# Restart the visuals with: sudo systemctl start sideshow-player (or reboot).
+RestartPreventExitStatus=80
+ExecStopPost=+/bin/sh -c 'if [ "$EXIT_STATUS" = 80 ]; then chvt 1 2>/dev/null; systemctl start getty@tty1.service; fi'
 
 [Install]
 WantedBy=multi-user.target
