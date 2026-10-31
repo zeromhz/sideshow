@@ -5,9 +5,33 @@
 #include "ISFPassTarget.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 namespace sideshow {
 namespace {
+// 32-bit float textures can only be sampled with linear filtering where the driver supports
+// OES_texture_float_linear. The Pi's V3D driver does not: an RGBA32F texture with GL_LINEAR (how
+// VVGL creates float textures) is incomplete there and samples as zero, which silenced every
+// shader's audio input and blacked out FLOAT passes. Where it is missing, float targets and audio
+// textures use RGBA16F instead, which V3D filters. SIDESHOW_ISF_HALF_FLOAT=1 forces this (tests).
+bool halfFloatTargets(){
+ static const bool unsupported=[]{GLint n=0;glGetIntegerv(GL_NUM_EXTENSIONS,&n);
+  for(GLint i=0;i<n;++i){auto e=reinterpret_cast<const char*>(glGetStringi(GL_EXTENSIONS,GLuint(i)));if(e&&std::strcmp(e,"GL_OES_texture_float_linear")==0)return false;}
+  return true;}();
+ const char* forced=std::getenv("SIDESHOW_ISF_HALF_FLOAT");
+ return unsupported||(forced&&std::strcmp(forced,"1")==0);
+}
+VVGL::GLBufferRef createHalfFloatTex(const VVGL::Size& size,const VVGL::GLBufferPoolRef& pool){
+ VVGL::GLBuffer::Descriptor desc;
+ desc.type=VVGL::GLBuffer::Type_Tex;desc.target=VVGL::GLBuffer::Target_2D;
+ desc.internalFormat=static_cast<VVGL::GLBuffer::InternalFormat>(GL_RGBA16F);
+ desc.pixelFormat=VVGL::GLBuffer::PF_RGBA;desc.pixelType=static_cast<VVGL::GLBuffer::PixelType>(GL_HALF_FLOAT);
+ desc.cpuBackingType=VVGL::GLBuffer::Backing_None;desc.gpuBackingType=VVGL::GLBuffer::Backing_Internal;
+ auto texture=pool->createBufferRef(desc,size,nullptr,VVGL::Size(),true);
+ if(texture)texture->parentBufferPool=pool;
+ return texture;
+}
 using namespace VVGL;using namespace VVISF;
 struct Guard {
  fluid_gl::StateGuard state;
@@ -66,7 +90,7 @@ struct IsfRuntime::Impl {
  // they are drawn (replacement history) need clearing here. Skipping the others saves a
  // full-size clear per buffer per frame, which a tiled GPU flushes to memory as its own job.
  VVGL::GLBufferRef make(int w,int h,bool floating,bool clear=true){
-  auto texture=floating?VVGL::CreateRGBAFloatTex(VVGL::Size(w,h),true,pool.value):VVGL::CreateRGBATex(VVGL::Size(w,h),true,pool.value);
+  auto texture=floating?(halfFloatTargets()?createHalfFloatTex(VVGL::Size(w,h),pool.value):VVGL::CreateRGBAFloatTex(VVGL::Size(w,h),true,pool.value)):VVGL::CreateRGBATex(VVGL::Size(w,h),true,pool.value);
   auto fbo=VVGL::CreateFBO(true,pool.value);glBindFramebuffer(GL_FRAMEBUFFER,fbo->name);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,texture->name,0);
   if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw std::runtime_error("ISF requested texture format is not renderable");if(clear){const GLfloat black[]={0,0,0,0};glClearBufferfv(GL_COLOR,0,black);}checkGl();return texture;
  }
