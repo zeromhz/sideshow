@@ -16,21 +16,47 @@ planning context; the guides above describe the current implementation.
 
 ## Raspberry Pi setup (per panel)
 
-1. Flash **Raspberry Pi OS Lite (64-bit, Bookworm)** with Raspberry Pi Imager. In its settings, set
-   the username/password, enable SSH, and enter the stage Wi-Fi.
-2. Plug in the USB mic and HDMI, boot, then SSH in:
+1. **Flash the SD card** with Raspberry Pi Imager: choose **Raspberry Pi 5**, then **Raspberry Pi
+   OS Lite (64-bit)**. When Imager asks *"Would you like to apply OS customisation settings?"*
+   choose **Edit settings**. Skipping this step is the usual reason a panel can't be reached:
+   - **General:** set a username and password (write them down), the Wi-Fi network you will
+     install over, and the **wireless LAN country**; Wi-Fi stays off without a country.
+   - **Services:** tick **Enable SSH** (password authentication).
+   - Then **Save** and **Yes** to apply them.
+2. **First boot:** plug in the USB mic and HDMI, power on, wait about a minute, then from a
+   laptop on the same network:
+   ```bash
+   ssh <username>@raspberrypi.local
+   ```
+   If the name doesn't resolve, find the Pi's address in your router (or, on an iPhone hotspot,
+   try `172.20.10.2` to `172.20.10.14`).
+3. **Install**, saving every Wi-Fi network the panel will meet (stage, studio, phone hotspot):
    ```bash
    sudo apt-get install -y git
    git clone https://github.com/zeromhz/sideshow.git ~/sideshow
-   sudo ~/sideshow/setup/install.sh --panel-id panel-01
+   sudo ~/sideshow/setup/install.sh --panel-id panel-01 \
+       --wifi "Stage Wi-Fi" "stage-password" --wifi "Josh’s iPhone" "hotspot-password"
    sudo reboot
    ```
-   Use a unique id per panel (`panel-01` … `panel-08`); it becomes the hostname
-   (`ssh <user>@panel-01.local`) and the panel's OSC address.
-3. After reboot the panel goes black → visuals in about 20 s. No keyboard, mouse, or network needed.
-   For the first minute the panel ID and IP address appear in small type in the bottom-right
-   corner (`panel-01  192.168.1.23`, or `no network`), so you can find each panel on the network.
+   Network names must match exactly, including capitals and punctuation. iPhone hotspot names
+   usually contain a curly apostrophe (’, not '); copy it from Settings → General → About → Name,
+   or rename the phone to something plain. Use a unique id per panel (`panel-01` … `panel-08`);
+   it becomes the hostname (`ssh <username>@panel-01.local`) and the panel's OSC address.
+   Installing downloads and builds for a while, so use a network with internet access.
+4. **After reboot** the panel goes black → visuals in about 20 s. No keyboard, mouse, or network
+   needed. For the first minute the bottom-right corner shows how to reach it, e.g.
+   `panel-01  ssh pi@172.20.10.3  wifi: Josh’s iPhone` (or `no network`, `wifi: none`).
    Set `[display] ip_overlay_seconds = 0` to turn this off.
+
+**Getting back into a panel later:**
+- **Same network:** `ssh <username>@panel-01.local`, or the address shown at boot.
+- **Saved networks:** the panel joins whichever saved network it finds and keeps retrying, so
+  a panel booted before its hotspot came up connects once it appears. To save more networks
+  later, re-run `install.sh` with `--wifi`, or use `sudo nmtui` once logged in.
+- **No shared network:** connect an Ethernet cable straight from your laptop to the Pi. After
+  about 20 s without a router, both pick self-assigned addresses and
+  `ssh <username>@panel-01.local` works over the cable.
+- **Keyboard on the panel:** press **Ctrl+Alt+Q** for a login prompt on the screen (below).
 
 To update: `cd ~/sideshow && git pull && sudo setup/install.sh && sudo systemctl restart sideshow-player` (keeps your `/etc/sideshow/config.toml`).
 
