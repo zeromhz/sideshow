@@ -10,12 +10,13 @@ TEST_CASE("Decoder drains reordered frames and rewinds silently") {
         VideoDecoder decoder(videoFixture(name), [] { return false; });
         auto first = decoder.next(); REQUIRE(first);
         CHECK(first->width == 64); CHECK(first->height == 48); CHECK(first->pts == 0);
-        CHECK(first->rgba.size() == 64 * 48 * 4);
-        for (size_t i=3; i<first->rgba.size(); i+=4) REQUIRE(first->rgba[i] == 255);
+        CHECK(first->format == VideoPixels::Yuv420);
+        CHECK(first->stride == 64); CHECK(first->chromaStride == 32);
+        CHECK(first->pixels.size() == 64 * 48 + 2 * 32 * 24);
         auto second=decoder.next(); REQUIRE(second); CHECK(second->pts == Catch::Approx(.2));
         auto third=decoder.next(); REQUIRE(third); CHECK(third->pts == Catch::Approx(.4));
         CHECK_FALSE(decoder.next()); CHECK_FALSE(decoder.next());
-        for (int i=0;i<3;++i) { decoder.rewind(); auto again=decoder.next(); REQUIRE(again); CHECK(again->pts==0); CHECK(again->rgba==first->rgba); }
+        for (int i=0;i<3;++i) { decoder.rewind(); auto again=decoder.next(); REQUIRE(again); CHECK(again->pts==0); CHECK(again->pixels==first->pixels); }
     }
 }
 TEST_CASE("Decoder honors variable timestamps aspect and rotation") {

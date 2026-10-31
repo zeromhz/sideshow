@@ -31,7 +31,7 @@ int main() {
     int status=0;
     try {
         VideoPresenter presenter(320,180);VideoFrame frame;frame.width=frame.height=2;frame.stride=8;
-        frame.rgba={255,0,0,255,255,0,0,255,255,0,0,255,255,0,0,255};
+        frame.pixels={255,0,0,255,255,0,0,255,255,0,0,255,255,0,0,255};
         GLuint pbo=0,sampler=0;glGenBuffers(1,&pbo);glBindBuffer(GL_PIXEL_UNPACK_BUFFER,pbo);
         glBufferData(GL_PIXEL_UNPACK_BUFFER,64,nullptr,GL_STATIC_DRAW);
         glPixelStorei(GL_UNPACK_ROW_LENGTH,7);glPixelStorei(GL_UNPACK_SKIP_ROWS,3);glPixelStorei(GL_UNPACK_ALIGNMENT,8);
@@ -50,7 +50,17 @@ int main() {
         presenter.render();require(pixel(160,90)[0]>250,"Allocation failure replaced old picture");
         frame.stride=1;bool failed=false;try{presenter.upload(frame);}catch(...){failed=true;}
         require(failed,"Invalid stride accepted");presenter.render();require(pixel(160,90)[0]>250,"Failed upload lost old picture");
-        frame.stride=8;frame.rgba={255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255};frame.rotationDegrees=90;
+        // YUV 4:2:0 is converted on the GPU: BT.601 limited-range red, then BT.709 full-range grey.
+        VideoFrame yuv;yuv.format=VideoPixels::Yuv420;yuv.width=yuv.height=2;yuv.stride=2;yuv.chromaStride=1;
+        yuv.matrix=VideoMatrix::Bt601;yuv.fullRange=false;yuv.pixels={81,81,81,81,90,240};
+        presenter.upload(yuv);presenter.render();auto red=pixel(160,90);
+        require(red[0]>245&&red[1]<12&&red[2]<12,"BT.601 limited YUV did not convert to red");
+        yuv.matrix=VideoMatrix::Bt709;yuv.fullRange=true;yuv.pixels={128,128,128,128,128,128};
+        presenter.upload(yuv);presenter.render();auto grey=pixel(160,90);
+        require(grey[0]>=126&&grey[0]<=130&&grey[1]>=126&&grey[1]<=130&&grey[2]>=126&&grey[2]<=130,"BT.709 full-range grey shifted");
+        yuv.pixels.pop_back();bool shortFrame=false;try{presenter.upload(yuv);}catch(...){shortFrame=true;}
+        require(shortFrame,"Truncated YUV frame accepted");
+        frame.stride=8;frame.pixels={255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255};frame.rotationDegrees=90;
         presenter.upload(frame);require(glGetError()==GL_NO_ERROR,"Rotation upload left GL error");presenter.render();require(pixel(100,30)[0]>200,"Rotation quadrant incorrect");
         presenter.resize(0,0);presenter.resize(320,180);
         BrightnessPass brightness;brightness.apply(0,320,180);require(pixel(160,90)[0]==0,"Blackout failed");
@@ -91,7 +101,8 @@ int main() {
         video.setEnd(VideoEnd::Hold);video.setPaused(false);video.render(10);
         std::this_thread::sleep_for(std::chrono::milliseconds(40));
         auto uploadsBefore=video_gl_tracking::uploads;video.maintenance();
-        require(video_gl_tracking::uploads-uploadsBefore<=1,"Late frames caused multiple uploads in one maintenance pass");
+        // One decoded frame uploads three planes (Y, U, V).
+        require(video_gl_tracking::uploads-uploadsBefore<=3,"Late frames caused multiple uploads in one maintenance pass");
         require(glGetError()==GL_NO_ERROR,"GL error");
         VideoTree tree;tree.file("nested folder/first.mp4");tree.file("nested folder/second.mp4");
         std::filesystem::copy_file(videoFixture("reordered.mp4"),tree.root/"nested folder/first.mp4",std::filesystem::copy_options::overwrite_existing);

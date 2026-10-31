@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 #include <variant>
+#include <vector>
 
 #include "audio_capture.h"
 #include "audio_feed.h"
@@ -20,6 +21,7 @@
 #include "display.h"
 #include "log.h"
 #include "display_mode.h"
+#include "gl.h"
 #include "osc_server.h"
 #include "output_level.h"
 #include "preset_catalog.h"
@@ -55,6 +57,60 @@ std::string configPathFromArgs(int argc, char** argv) {
     return kDefaultConfigPath;
 }
 
+// --warm-cache [playlist]: nullopt when absent; the playlist defaults to the configured one.
+std::optional<std::string> warmPlaylistFromArgs(int argc, char** argv, const std::string& fallback) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--warm-cache") != 0) continue;
+        if (i + 1 < argc && argv[i + 1][0] != '-') return std::string(argv[i + 1]);
+        return fallback;
+    }
+    return std::nullopt;
+}
+
+// Loads every preset of a playlist once and renders it at the panel's real size, so Mesa's
+// on-disk shader cache (~/.cache/mesa_shader_cache of the user running it) holds every compiled
+// shader before a show. Later preset switches then skip shader compilation, which is most of
+// their hitch. Run it as the service user with the service stopped; re-run after Mesa upgrades.
+int warmShaderCache(const Config& config, Display& display, const std::string& playlist) {
+    PresetCatalog catalog(config.presets.root);
+    const std::vector<std::string> files = catalog.presetsIn(playlist);
+    if (files.empty()) {
+        logError("warm-cache: playlist '" + playlist + "' is missing or empty");
+        return 1;
+    }
+    Renderer renderer(display.drawableWidth(), display.drawableHeight(), config.display.fps,
+                      config.presets);
+    logInfo("warm-cache: " + std::to_string(files.size()) + " presets from '" + playlist + "'");
+    std::vector<std::pair<double, std::string>> slowest;
+    const auto started = std::chrono::steady_clock::now();
+    for (size_t i = 0; i < files.size() && !g_signalled.load(); ++i) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) g_signalled.store(true);
+        }
+        const auto before = std::chrono::steady_clock::now();
+        projectm_load_preset_file(renderer.handle(), files[i].c_str(), false);
+        // The driver finishes compiling on first use, so draw twice before timing stops.
+        for (int frame = 0; frame < 2; ++frame) renderer.renderFrame();
+        glFinish();
+        const double ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - before).count();
+        display.swap();
+        slowest.emplace_back(ms, files[i]);
+        if ((i + 1) % 100 == 0 || i + 1 == files.size()) {
+            logInfo("warm-cache: " + std::to_string(i + 1) + "/" + std::to_string(files.size()));
+        }
+    }
+    std::sort(slowest.rbegin(), slowest.rend());
+    for (size_t i = 0; i < std::min<size_t>(10, slowest.size()); ++i) {
+        logInfo("warm-cache: slowest " + std::to_string(static_cast<int>(slowest[i].first)) +
+                " ms  " + slowest[i].second);
+    }
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    logInfo("warm-cache: done in " + std::to_string(static_cast<int>(seconds)) + " s");
+    return g_signalled.load() ? 1 : 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -84,6 +140,14 @@ int main(int argc, char** argv) {
     int exitCode = 0;
     try {
         // Declaration order matters: later objects are destroyed first.
+        if (auto playlist = warmPlaylistFromArgs(argc, argv, config.presets.playlist)) {
+            {
+                Display display(config.display);
+                exitCode = warmShaderCache(config, display, *playlist);
+            }
+            SDL_Quit();
+            return exitCode;
+        }
         Display display(config.display);
         IsfServices isfServices(config.isf);
         VideoWorker videoWorker(config.video.root);

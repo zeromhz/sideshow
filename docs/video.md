@@ -60,12 +60,16 @@ end = "loop"
 
 Use progressive SDR H.264 MP4 at 720p or 1080p as a starting point. HDR and interlaced
 media are rejected. Source dimensions must be at most 4096 per axis and 8,847,360
-pixels. Converted frames fit a 1920×1080 landscape or 1080×1920 portrait box. Presentation
-honors sample aspect and 90-degree rotation metadata, fits on black, and uses opaque alpha.
+pixels. Frames larger than a 1920×1080 landscape or 1080×1920 portrait box are scaled down to
+fit it. Frames reach the GPU as 8-bit planar YUV 4:2:0: 8-bit 4:2:0 footage within the box is
+copied as is, and other formats are converted to it once on the CPU. The shader converts to RGB
+using the clip's BT.601/709/2020 matrix and limited or full range (unspecified matrices use
+BT.709 from 720 lines up, BT.601 below). Presentation honors sample aspect and 90-degree
+rotation metadata, fits on black, and uses opaque alpha.
 
 One application-owned worker performs scanning and software decoding. It owns at most a
-current and candidate decoder; three completed RGBA frames are allowed across worker and
-presenter ownership. Two codec threads and five-second cooperative operation deadlines
+current and candidate decoder; three completed frames are allowed across worker and
+presenter ownership. Three codec threads and five-second cooperative operation deadlines
 bound work. Cancellation cannot preempt arbitrary codec code or a blocked filesystem call.
 The render thread never waits for decoding. Late frames leave the prior image visible.
 

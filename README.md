@@ -52,6 +52,9 @@ Notes:
   (`MilkDrop render …`). Set `[presets] render_scale` (0.25–1) to change it.
 - Frame rate is capped at 30 fps (`[display] fps`, 1–30). On a 60 Hz screen each frame is held
   for exactly two refreshes.
+- Setup tunes the Pi for stage use: the player runs the CPU at full clock (performance
+  governor), Wi-Fi power saving is off (it delays OSC), and the background `apt-daily` and
+  `man-db` timers are disabled. Update packages by hand between shows.
 - If no screen is detected at boot, the player exits and systemd retries every 2 s, so visuals
   appear shortly after the screen is powered on.
 - The tty1 login prompt is disabled; use SSH.
@@ -123,6 +126,21 @@ The pack's ≥24 fps filter was measured on the author's own Pi 5 at an unstated
 treat it as a starting point, not a guarantee — measure actual fps at bring-up with
 `tools/osc_send.py ping`, and expect a curated `stage` playlist of the fastest, most reliable
 presets to follow once that's done.
+
+### Warming the shader cache before a show
+
+The first time a panel shows a preset, compiling its shaders stalls the picture for a moment
+(up to about a second for the heaviest presets). Compiled shaders are kept in
+`/var/lib/sideshow/.cache`, so each preset only pays this once. To pay it ahead of time:
+
+```bash
+sudo ~/sideshow/setup/warm_cache.sh hypnotic   # or any playlist; no name = the configured one
+```
+
+This stops the player, loads every preset of the playlist once at the panel's resolution, logs
+the slowest ten (good candidates to leave out of a stage playlist), and starts the player again.
+In testing, the slowest preset's load fell from 1.2 s cold to 0.1 s warm. Re-run after OS (Mesa) or projectM
+updates. Warming all 7,998 presets of `default` takes a long time; warm the playlists you show.
 
 ## Development (macOS)
 
