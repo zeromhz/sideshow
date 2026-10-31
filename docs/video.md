@@ -44,8 +44,11 @@ wire format and reports `video/concert/intro.mp4` only after activation.
 
 A failed explicit clip load preserves the last picture and selection. Startup, folder
 selection and automatic navigation try eligible clips once, then stop. Missing startup
-media keeps MilkDrop running. Looping holds the last picture during rewind; seamless
-frame-perfect loops are not guaranteed. Audio tracks are never decoded or played.
+media keeps MilkDrop running. In loop mode (and next mode while locked) the decoder rewinds
+on its own when it reaches the end and keeps decoding ahead on one continuous timeline, so the
+loop point does not stall as long as decoding keeps up with real time. The loop length is the
+last frame's end time. Restart (`video_restart`) still begins the clip again from scratch.
+Audio tracks are never decoded or played.
 
 ```toml
 [visuals]

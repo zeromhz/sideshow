@@ -22,7 +22,9 @@ public:
     void cancel(uint64_t session);
     void reject(uint64_t session,uint64_t generation);
     void rewind(uint64_t session,uint64_t newGeneration);
-    void playback(uint64_t session,double position,bool paused);
+    // looping: at the end of the clip, rewind and continue on the same timeline instead of
+    // reporting EOF (the Loop end policy).
+    void playback(uint64_t session,double position,bool paused,bool looping=false);
     std::optional<VideoEvent> poll(uint64_t session);
 private:
     struct Impl;

@@ -16,6 +16,12 @@ TEST_CASE("Video pause lock and end policies act once at the final frame") {
         CHECK(clock.takeAction() == VideoAction::None);
     }
 }
+TEST_CASE("Only the loop policy (or a locked next) loops in place") {
+    VideoPlayback clock(VideoEnd::Loop);CHECK(clock.loops());
+    clock.setEnd(VideoEnd::Hold);CHECK_FALSE(clock.loops());
+    clock.setEnd(VideoEnd::Next);CHECK_FALSE(clock.loops());
+    clock.setLocked(true);CHECK(clock.loops());
+}
 TEST_CASE("Changing a held video end policy applies after unpausing") {
     VideoPlayback clock(VideoEnd::Hold); clock.markEof(1); clock.advance(2);
     CHECK(clock.takeAction() == VideoAction::None);

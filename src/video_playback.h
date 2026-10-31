@@ -13,6 +13,7 @@ public:
     void setLocked(bool value);
     void setEnd(VideoEnd value);
     VideoEnd end() const { return end_; }
+    bool loops() const { return effectiveEnd() == VideoEnd::Loop; }
     void markEof(double endSeconds);
     VideoAction takeAction();
     double position() const { return position_; }
