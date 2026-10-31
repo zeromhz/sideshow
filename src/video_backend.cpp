@@ -4,7 +4,8 @@
 namespace sideshow {
 VideoBackend::VideoBackend(const BackendInit& init,VideoWorker& worker)
     :worker_(worker),presenter_(init.width,init.height),clock_(init.videoEnd),
-     session_(worker.acquireSession()),startupPreset_(init.selection.preset) {clock_.setLocked(init.playback.locked);}
+     session_(worker.acquireSession()),releaseLead_(0.5/std::max(1,init.config.display.fps)),
+     startupPreset_(init.selection.preset) {clock_.setLocked(init.playback.locked);}
 VideoBackend::~VideoBackend() {worker_.cancel(session_);}
 void VideoBackend::request(std::vector<std::string> ids) {
     attempts_=std::move(ids);attempt_=0;tryNext();
@@ -47,7 +48,7 @@ void VideoBackend::navigate(int direction,bool randomize) {
 void VideoBackend::next() {navigate(1);}
 void VideoBackend::prev() {navigate(-1);}
 void VideoBackend::random() {navigate(1,true);}
-void VideoBackend::setPaused(bool value) {clock_.setPaused(value);worker_.playback(session_,clock_.position(),value);}
+void VideoBackend::setPaused(bool value) {clock_.setPaused(value);worker_.playback(session_,clock_.position()+releaseLead_,value);}
 void VideoBackend::restart() {
     if(!activeGeneration_) return;
     attempts_.clear();attempt_=0;loading_=true;worker_.rewind(session_,++generation_);
@@ -96,7 +97,7 @@ void VideoBackend::maintenance() {
 }
 void VideoBackend::render(float dt) {
     if(!loading_) clock_.advance(dt);
-    worker_.playback(session_,clock_.position(),clock_.paused());
+    worker_.playback(session_,clock_.position()+releaseLead_,clock_.paused());
     if(!loading_) switch(clock_.takeAction()) {
         case VideoAction::Rewind: restart();break;
         case VideoAction::Advance: next();break;

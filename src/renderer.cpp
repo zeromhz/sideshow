@@ -90,8 +90,8 @@ void Renderer::renderFrame() {
     }
 
     // projectM left its frame in the bottom-left internal_ corner of the back buffer. Copy it
-    // out, then stretch it over the whole screen. Blits honour the scissor test, which presets
-    // may leave enabled.
+    // out, then stretch it over the whole screen. Blits and clears honour the scissor test, so
+    // make sure it is off.
     glDisable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_);
@@ -99,6 +99,9 @@ void Renderer::renderFrame() {
                       internal_.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    // The stretch overwrites the whole screen. Clearing first tells a tiled GPU (the Pi's V3D)
+    // not to reload the old screen contents from memory before drawing over them.
+    glClear(GL_COLOR_BUFFER_BIT);
     glBlitFramebuffer(0, 0, internal_.width, internal_.height, 0, 0, width_, height_,
                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

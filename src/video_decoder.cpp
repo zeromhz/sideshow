@@ -3,6 +3,7 @@
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
@@ -133,7 +134,9 @@ struct VideoDecoder::Impl {
 #if LIBAVCODEC_VERSION_MAJOR < 60
         codec->thread_safe_callbacks = 1;
 #endif
-        codec->thread_count=2; checked(avcodec_open2(codec,decoder,nullptr),"Open codec");
+        // Three decode threads leave a core of the Pi 5's four for rendering and audio.
+        codec->thread_count=3; codec->thread_type=FF_THREAD_FRAME|FF_THREAD_SLICE;
+        checked(avcodec_open2(codec,decoder,nullptr),"Open codec");
         packet=av_packet_alloc(); frame=av_frame_alloc(); if(!packet || !frame) throw std::bad_alloc();
         auto rate=av_guess_frame_rate(format,s,nullptr); timestamps=VideoTimestamps(av_q2d(rate));
 #if LIBAVFORMAT_VERSION_MAJOR >= 61
@@ -182,7 +185,11 @@ struct VideoDecoder::Impl {
         result.rgba.resize(size_t(result.stride)*result.height);
         uint8_t* output[]={result.rgba.data(),nullptr,nullptr,nullptr}; int strides[]={result.stride,0,0,0};
         checked(sws_scale(scaler,frame->data,frame->linesize,0,frame->height,output,strides),"Convert video");
-        for(size_t i=3;i<result.rgba.size();i+=4) result.rgba[i]=255;
+        // swscale already writes opaque alpha for sources without an alpha channel; only sources
+        // that carry their own alpha need flattening.
+        const AVPixFmtDescriptor* descriptor=av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
+        if(!descriptor || (descriptor->flags & AV_PIX_FMT_FLAG_ALPHA))
+            for(size_t i=3;i<result.rgba.size();i+=4) result.rgba[i]=255;
         return result;
     }
     std::optional<VideoFrame> next() {
