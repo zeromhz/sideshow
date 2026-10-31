@@ -23,6 +23,7 @@ TEST_CASE("Config: empty text gives all defaults and no warnings") {
     CHECK(r.config.display.maxHeight == 1440);
     CHECK(r.config.display.fps == 30);
     CHECK(r.config.display.fullscreen);
+    CHECK(r.config.display.ipOverlaySeconds == 60);
     CHECK(r.config.audio.device.empty());
     CHECK(r.config.audio.sampleRate == 48000);
     CHECK(r.config.osc.port == 9000);
@@ -131,9 +132,12 @@ TEST_CASE("Config: frame rate is capped at 30 and render scale is bounded") {
     ConfigResult r = parseConfig(R"(
 [display]
 fps = 60
+ip_overlay_seconds = 1000
 [presets]
 render_scale = 0.1
 )");
+    CHECK(r.config.display.ipOverlaySeconds == 60);
+    CHECK(hasWarningContaining(r, "display.ip_overlay_seconds"));
     CHECK(r.config.display.fps == 30);
     CHECK(r.config.presets.renderScale == 2.0 / 3.0);
     CHECK(hasWarningContaining(r, "display.fps"));

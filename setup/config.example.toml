@@ -10,6 +10,7 @@ max_width = 2560               # automatic mode never exceeds this (4K screens s
 max_height = 1440
 fps = 30                       # frame-rate ceiling, 1..30
 fullscreen = true
+ip_overlay_seconds = 60         # show panel ID + IP bottom-right after boot; 0 = off
 
 [audio]
 device = ""                    # "" = first capture device; else part of its name, e.g. "USB"

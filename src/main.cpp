@@ -22,6 +22,8 @@
 #include "preset_catalog.h"
 #include "preset_manager.h"
 #include "renderer.h"
+#include "boot_overlay.h"
+#include "boot_overlay_gl.h"
 #include "visual_controller.h"
 #include "milkdrop_backend.h"
 #include "fluid_backend.h"
@@ -86,6 +88,12 @@ int main(int argc, char** argv) {
                 return std::make_unique<MilkdropBackend>(init);
             });
         BrightnessPass brightness;
+        // Panel ID and IP address in the bottom-right corner for the first minute after boot.
+        BootOverlay bootOverlay;
+        const auto uptimeAtStart = systemUptimeSeconds();
+        const Uint64 startCounter = SDL_GetPerformanceCounter();
+        double lastAddressCheck = -1.0;
+        logInfo(bootOverlayText(config.panelId, localIpv4Addresses()));
 
         OutputLevel output(config.output.masterDefault, config.output.masterCurve,
                            config.output.masterSmoothingMs);
@@ -150,6 +158,18 @@ int main(int argc, char** argv) {
             output.update(dtSeconds);
             lastTicks = now;
             visuals.render(dtSeconds);
+            const double elapsed = static_cast<double>(SDL_GetPerformanceCounter() - startCounter) /
+                                   static_cast<double>(SDL_GetPerformanceFrequency());
+            const float overlayAlpha =
+                bootOverlayAlpha(elapsed, config.display.ipOverlaySeconds, uptimeAtStart);
+            if (overlayAlpha > 0.0f) {
+                // Re-check every second: Wi-Fi often joins after the player has started.
+                if (lastAddressCheck < 0.0 || elapsed - lastAddressCheck >= 1.0) {
+                    bootOverlay.setText(bootOverlayText(config.panelId, localIpv4Addresses()));
+                    lastAddressCheck = elapsed;
+                }
+                bootOverlay.draw(overlayAlpha, display.drawableWidth(), display.drawableHeight());
+            }
             brightness.apply(output.brightness(),display.drawableWidth(),display.drawableHeight());
             display.swap();
 

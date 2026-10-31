@@ -20,6 +20,7 @@ The [example config](../setup/config.example.toml) is a copyable starting point.
 | `display.max_height` | `1440` | Integer 240–4320; automatic fullscreen selection cap |
 | `display.fps` | `30` | Integer 1–30; frame-rate ceiling for every mode. Values above 30 (such as an older `fps = 60`) warn and use 30. On a 60 Hz screen at 30 fps each frame is held for two refreshes |
 | `display.fullscreen` | `true` | Boolean; false creates a resizable development window |
+| `display.ip_overlay_seconds` | `60` | Integer 0–600; after boot, show the panel ID and IPv4 address(es) in small type in the bottom-right corner for this many seconds (0 = off). Only shown when the Pi booted in the last 5 minutes, so a player restart mid-show stays clean. Blackout and master hide it |
 
 An unsupported explicit fullscreen size falls back to automatic selection. Automatic
 selection favors native resolution within the caps, otherwise aspect-matching modes within

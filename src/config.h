@@ -18,6 +18,7 @@ struct Config {
         int maxHeight = 1440;
         int fps = 30;          // frame-rate ceiling, 1-30
         bool fullscreen = true;
+        int ipOverlaySeconds = 60;  // show panel ID and IP address after boot; 0 = off
     } display;
 
     struct Audio {
