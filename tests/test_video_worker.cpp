@@ -6,6 +6,8 @@
 #include "video_worker.h"
 #include "support/video_fixtures.h"
 #include <chrono>
+#include <cmath>
+#include <utility>
 #include <thread>
 using namespace sideshow;
 namespace {
@@ -131,4 +133,49 @@ TEST_CASE("Failed replacement preserves committed EOF notification") {
     REQUIRE(*reached);
     worker.open({session,2,"corrupt.mp4"});waitEvent(worker,session,VideoEventKind::Failed);
     CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==1);
+}
+TEST_CASE("Looping continues on one timeline without EOF, and stops when looping is turned off") {
+    VideoWorker worker(videoFixture(""));auto session=worker.acquireSession();
+    waitEvent(worker,session,VideoEventKind::Catalog);
+    worker.open({session,1,"reordered.mp4"});  // three frames at 0, .2 and .4 s; ends at .6 s
+    auto first=waitEvent(worker,session,VideoEventKind::Frame);CHECK(first.frame->pts==0);
+    worker.commit(session,1);
+    double previous=0;int frames=1;
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+    // Release everything decoded up to 2.5 s: four passes of the clip.
+    while(frames<13 && std::chrono::steady_clock::now()<deadline) {
+        worker.playback(session,2.5,false,true);
+        auto event=worker.poll(session);
+        if(!event) {std::this_thread::sleep_for(std::chrono::milliseconds(1));continue;}
+        REQUIRE(event->kind==VideoEventKind::Frame);  // no EOF while looping
+        CHECK(event->generation==1);
+        CHECK(event->frame->pts==Catch::Approx(previous+.2));
+        previous=event->frame->pts;++frames;
+    }
+    CHECK(frames==13);
+    CHECK(previous==Catch::Approx(2.4));
+    // Without looping, the clip ends at the end of the current pass.
+    worker.playback(session,100,false,false);
+    auto end=waitEvent(worker,session,VideoEventKind::Eof);
+    CHECK(end.generation==1);
+    CHECK(std::fmod(end.endSeconds+1e-9,.6)<1e-6);
+    CHECK(end.endSeconds>=3.0);
+}
+TEST_CASE("Looping falls back to EOF for clips that add no time or cannot rewind") {
+    struct Source : VideoSource {
+        double duration;bool rewindFails;int left=2;
+        Source(double d,bool f):duration(d),rewindFails(f){}
+        std::optional<VideoFrame> next() override {
+            if(left==0) return {};
+            VideoFrame frame;frame.pts=(2-left)*duration;frame.duration=duration;--left;return frame;
+        }
+        void rewind() override {if(rewindFails) throw std::runtime_error("cannot seek");left=2;}
+    };
+    for(auto [duration,rewindFails]:{std::pair{0.0,false},std::pair{.1,true}}) {
+        VideoWorker worker(videoFixture(""),[=](const auto&,auto){return std::make_unique<Source>(duration,rewindFails);});
+        auto session=worker.acquireSession();waitEvent(worker,session,VideoEventKind::Catalog);
+        worker.open({session,1,"reordered.mp4"});waitEvent(worker,session,VideoEventKind::Frame);
+        worker.commit(session,1);worker.playback(session,100,false,true);
+        CHECK(waitEvent(worker,session,VideoEventKind::Eof).generation==1);
+    }
 }

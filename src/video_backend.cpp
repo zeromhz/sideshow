@@ -48,7 +48,7 @@ void VideoBackend::navigate(int direction,bool randomize) {
 void VideoBackend::next() {navigate(1);}
 void VideoBackend::prev() {navigate(-1);}
 void VideoBackend::random() {navigate(1,true);}
-void VideoBackend::setPaused(bool value) {clock_.setPaused(value);worker_.playback(session_,clock_.position()+releaseLead_,value);}
+void VideoBackend::setPaused(bool value) {clock_.setPaused(value);worker_.playback(session_,clock_.position()+releaseLead_,value,clock_.loops());}
 void VideoBackend::restart() {
     if(!activeGeneration_) return;
     attempts_.clear();attempt_=0;loading_=true;worker_.rewind(session_,++generation_);
@@ -92,12 +92,12 @@ void VideoBackend::maintenance() {
         activeGeneration_=latest->generation;clock_.beginClip();loading_=false;attempts_.clear();
         if(auto clip=catalog_->find(latest->clipId)) selection_={clip->folder,clip->id};
         worker_.commit(session_,activeGeneration_);preparation_={PreparationState::Ready,{}};
-        worker_.playback(session_,0,clock_.paused());
+        worker_.playback(session_,0,clock_.paused(),clock_.loops());
     }
 }
 void VideoBackend::render(float dt) {
     if(!loading_) clock_.advance(dt);
-    worker_.playback(session_,clock_.position()+releaseLead_,clock_.paused());
+    worker_.playback(session_,clock_.position()+releaseLead_,clock_.paused(),clock_.loops());
     if(!loading_) switch(clock_.takeAction()) {
         case VideoAction::Rewind: restart();break;
         case VideoAction::Advance: next();break;

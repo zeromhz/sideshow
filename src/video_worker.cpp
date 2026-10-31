@@ -18,7 +18,7 @@ struct VideoWorker::Impl {
     uint64_t serial=0, session=0, workerSession=0, committed=0, rewindGeneration=0, activeGeneration=0, rejected=0;
     std::optional<VideoOpenRequest> requested;
     double position=0;
-    bool paused=false, preparing=false;
+    bool paused=false, preparing=false, looping=false;
     std::deque<VideoEvent> frames;
     std::optional<VideoEvent> catalogEvent,errorEvent,eofEvent,releaseEvent;
     std::shared_ptr<const VideoCatalog> catalog;
@@ -27,6 +27,9 @@ struct VideoWorker::Impl {
         uint64_t generation=0;
         std::string id;
         double end=0;
+        // Seamless looping: each pass after the first is shifted by the timeline length so far,
+        // so frame times keep increasing across the loop point.
+        double offset=0;
         bool done=false;
     } current,candidate;
     std::shared_ptr<std::atomic<int>> retained=std::make_shared<std::atomic<int>>(0);
@@ -94,7 +97,7 @@ struct VideoWorker::Impl {
                         candidate.id=request->clipId;
                     } else {
                         if(!current.source) throw std::runtime_error("No video to rewind");
-                        candidate=std::move(current);current={};candidate.source->rewind();candidate.done=false;
+                        candidate=std::move(current);current={};candidate.source->rewind();candidate.done=false;candidate.offset=0;
                     }
                     candidate.generation=generation;
                     auto budget=credit();
@@ -131,9 +134,26 @@ struct VideoWorker::Impl {
                 lock.lock();
                 if(cancelled()) continue;
                 if(frame) {
-                    frame->bufferCredit=std::move(budget);
+                    frame->bufferCredit=std::move(budget);frame->pts+=current.offset;
                     current.end=frame->pts+frame->duration;frame->generation=generation;frame->clipId=current.id;
                     auto output=event(VideoEventKind::Frame,generation);output.frame=std::move(frame);frames.push_back(std::move(output));
+                } else if(looping && current.end>current.offset) {
+                    // Loop without a round trip through the render thread: rewind here and keep
+                    // decoding, shifted by this pass's length. The next pass's first frames are
+                    // decoded ahead like any others, so the loop point does not stall. (A pass
+                    // that added no time, e.g. zero-length frames, falls back to EOF.)
+                    const double passEnd=current.end;
+                    lock.unlock();
+                    try {current.source->rewind();}
+                    catch(const std::exception&) {
+                        // Report a plain EOF: the backend's own loop path then rewinds, and moves
+                        // on to the next clip if that fails too.
+                        lock.lock();
+                        if(!cancelled()) {current.done=true;eofEvent=event(VideoEventKind::Eof,generation);eofEvent->endSeconds=current.end;}
+                        continue;
+                    }
+                    lock.lock();
+                    current.offset=passEnd;
                 } else {current.done=true;eofEvent=event(VideoEventKind::Eof,generation);eofEvent->endSeconds=current.end;}
             } catch(const std::exception& e) {
                 lock.lock();
@@ -172,9 +192,9 @@ void VideoWorker::rewind(uint64_t session,uint64_t generation) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
     if(session!=p.session) return;p.rewindGeneration=generation;p.requested.reset();p.frames.clear();p.errorEvent.reset();p.preparing=true;++p.revision;p.wake.notify_all();
 }
-void VideoWorker::playback(uint64_t session,double position,bool paused) {
+void VideoWorker::playback(uint64_t session,double position,bool paused,bool looping) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
-    if(session!=p.session || !std::isfinite(position)) return;p.position=position;p.paused=paused;p.wake.notify_all();
+    if(session!=p.session || !std::isfinite(position)) return;p.position=position;p.paused=paused;p.looping=looping;p.wake.notify_all();
 }
 std::optional<VideoEvent> VideoWorker::poll(uint64_t session) {
     auto& p=*impl_;std::lock_guard<std::mutex> lock(p.mutex);
