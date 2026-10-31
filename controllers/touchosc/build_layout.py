@@ -14,6 +14,12 @@ BLUE = (0.3, 0.6, 1, 1)
 RED = (0.95, 0.25, 0.3, 1)
 WHITE = (0.92, 0.95, 1, 1)
 MUTED = (0.52, 0.59, 0.68, 1)
+# Fractals panel: shader file stem and button title; sliders: ISF input, title, low, high, default.
+FRACTALS = [('julia','Julia'),('dive','Dive'),('kleinian','Kleinian'),('phoenix','Phoenix'),
+            ('nova','Nova'),('newton','Newton'),('burning_ship','Burning Ship'),
+            ('multibrot','Multibrot'),('nebula','Nebula')]
+FRACTAL_PARAMS = [('speed','Speed',0.0,4.0,1.0),('zoom','Zoom',0.5,4.0,1.0),
+                  ('color','Color',0.0,1.0,0.0),('detail','Detail',0.0,1.0,0.4)]
 
 
 def prop(node, key, value):
@@ -73,6 +79,33 @@ def button(parent, name, text, x,y,w,h, action, arg=None, color=BLUE, size=15):
 def field(parent,name,text,x,y,w,h=35):
     button(parent,'edit_'+name,'',x,y,w,h,'edit',name,color=MUTED)
     label(parent,'field_'+name,text,x+10,y,w-20,h,16)
+
+
+def fractal_panel(c):
+    # Hidden overlay above the control cards and the Video/Fluid rows. The header (target, Ping)
+    # and the command replies below stay visible and usable while it is open.
+    g=node(c,'GROUP','fractal_panel',(0,0,1100,690),BG,visible=False,interactive=False,background=False)
+    gc=ET.SubElement(g,'children')
+    node(gc,'BOX','fractal_block',(0,145,1100,545),BG,interactive=True)
+    node(gc,'BOX','fractal_card',(24,153,1052,527),PANEL)
+    label(gc,'fractal_title','FRACTALS  /  ISF',40,166,600,25,13,TEAL)
+    button(gc,'fractal_close','Close',956,163,104,34,'fractal_panel','close',MUTED,size=13)
+    label(gc,'fractal_pick_title','PICK ONE  (switches the panel to ISF mode)',40,212,700,22,11,MUTED)
+    for i,(stem,title) in enumerate(FRACTALS):
+        button(gc,'fractal_'+stem,title,40+(i%5)*205,240+(i//5)*58,195,48,'fractal',stem,size=15)
+    button(gc,'fractal_rotate','Rotate all',40+4*205,298,195,48,'fractal','rotate',TEAL,size=15)
+    label(gc,'fractal_params_title','SHARED PARAMETERS  (the selected shader)',40,372,700,22,11,MUTED)
+    for i,(name,title,low,high,default) in enumerate(FRACTAL_PARAMS):
+        x=40+(i%2)*520; y=402+(i//2)*84
+        label(gc,'fractal_'+name+'_title',title,x,y,200,26,18)
+        label(gc,'fractal_'+name+'_value',f'{default:.2f}',x+380,y,100,26,20,TEAL,3)
+        f=node(gc,'FADER','fractal_'+name,(x,y+32,480,36),TEAL,orientation=1,bar=True,cursor=True,
+               grid=False,response=0,outline=True,outlineStyle=0,
+               script="function onValueChanged(key)\n if key=='x' then root:notify('fractal_param',{"
+                      +lua(name)+",self.values.x}) end\nend")
+        value(f,'x',round((default-low)/(high-low),6))
+    label(gc,'fractal_note','Sliders show local values, not panel state. Other inputs (spin, weave, power, '
+          'density, reactivity) use the ISF parameter fields.',40,580,1020,40,12,MUTED)
 
 
 def build():
@@ -139,7 +172,7 @@ def build():
     label(c,'event_title','EVENT NAME',740,487,320,20,11,MUTED)
     field(c,'event','reset',740,517,218)
     button(c,'send_event','Trigger',970,517,90,35,'event')
-    label(c,'isf_note','Select ISF mode and a shader first.',740,562,320,20,12,MUTED)
+    button(c,'fractal_open','Fractals panel',740,557,320,30,'fractal_panel','open',TEAL,size=13)
     # Mode shortcuts.
     label(c,'persistence_title','FLUID PERSISTENCE',790,603,200,20,11,MUTED)
     label(c,'persistence_value','1.0x',1000,603,76,20,13,TEAL,3)
@@ -163,6 +196,7 @@ def build():
         label(c,'ack_title_'+str(slot),'',x,843,516,24,12,TEAL)
         for row in range(1,9):
             label(c,f'ack_{slot}_{row}','',x,872+(row-1)*19,516,19,11,MUTED)
+    fractal_panel(c)
     # TouchOSC text controls are display-only; supply a built-in editing keyboard.
     k=node(c,'GROUP','keyboard',(0,0,1100,1040),BG,visible=False,interactive=True)
     kc=ET.SubElement(k,'children')

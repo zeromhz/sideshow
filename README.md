@@ -187,18 +187,26 @@ feedback examples. See [ISF operation and limits](docs/isf.md).
 
 ### Fractals
 
-Setup also installs three original fractal generators in the ISF `fractal` folder. All
-three animate in silence, react to the mic, and share the same parameters.
+Setup also installs nine original fractal generators in the ISF `fractal` folder. All
+of them animate in silence, react to the mic, and share the same core parameters. They are
+2D only, so they stay within reach of a Pi 5; the gallery's raymarched 3D fractals are out of
+scope.
 
 | Shader | Look | Audio |
 |---|---|---|
 | `fractal/julia.fs` | Metallic Julia set whose parameter slowly circles, morphing between spirals, dendrites and dust | Bass pushes the set apart and speeds the morph; overall level brightens highlights |
 | `fractal/dive.fs` | Endless dive into the Mandelbrot set that loops seamlessly | Bass surges the dive forward; level brightens the edges |
 | `fractal/kleinian.fs` | Apollonian circle packing made by repeated circle inversion, bent around a drifting point | Bass swells the circles and speeds the drift; level brightens the edges |
+| `fractal/phoenix.fs` | Metallic Phoenix fractal in its upright pose, whose wings fold and re-form as its parameters circle | Bass frays the feathers and speeds the morph; level brightens highlights |
+| `fractal/nova.fs` | Metallic Nova (relaxed Newton) basins that spin and bloom in three colors | Bass over-relaxes the step, throwing filigree off the basin edges; level brightens highlights |
+| `fractal/newton.fs` | Stained-glass Newton fractal whose four roots wander, braiding glowing basin boundaries | Bass over-relaxes the step and shatters the boundaries; level brightens the leading |
+| `fractal/burning_ship.fs` | Burning Ship that weaves between the ship and its Julia sets, with an ember glow | Bass nudges the Julia parameter and speeds the weave; level brightens the rim |
+| `fractal/multibrot.fs` | Metallic Multibrot (z^d + c) that weaves between the set and its Julia sets while turning | Bass pushes the Julia parameter outward and speeds the weave; level brightens highlights |
+| `fractal/nebula.fs` | Drifting nebula of domain-warped noise with a glowing core, dust lanes and twinkling stars | Bass churns the gas and flares the core; level brightens the gas and stars |
 
 ```bash
 tools/osc_send.py mode isf
-tools/osc_send.py playlist fractal              # rotate through the three
+tools/osc_send.py playlist fractal              # rotate through all nine
 tools/osc_send.py preset fractal/dive.fs        # or pick one
 tools/osc_send.py isf_param speed 2.0
 ```
@@ -208,9 +216,14 @@ tools/osc_send.py isf_param speed 2.0
 | `speed` | 0–4 (1) | Animation speed; changes apply smoothly, without jumps |
 | `zoom` | 0.5–4 (1) | Magnification |
 | `color` | 0–1 (0) | Palette offset; colors also cycle slowly on their own |
-| `detail` | 0–1 (0.4, Kleinian 0.5) | Iteration limit (Julia 32–256, dive 64–512) or inversion depth (Kleinian 4–12) |
+| `detail` | 0–1 (0.4, Kleinian 0.5) | Iteration limit (Julia, Phoenix, Burning Ship, Multibrot 32–256; dive 64–512; Nova 24–128; Newton 16–96), inversion depth (Kleinian 4–12) or noise octaves (Nebula 3–6) |
 | `reactivity` | 0–3 (1) | Microphone influence; 0 ignores the mic |
 | `spin` | −2–2 (0.2) | Dive only: rotation speed and direction |
+| `weave` | −1–1 (−1) | Burning Ship and Multibrot: 0 shows the set, 1 a Julia set, values between blend them; −1 lets it weave back and forth on its own |
+| `power` | 2–6 (3) | Multibrot only: the exponent d. Whole numbers give the classic sets with d−1 lobes; values in between tear along a seam |
+| `density` | 0–1 (0.5) | Nebula only: how much gas and dust fill the sky |
 
-The TouchOSC ISF parameter fields send these as floats. Dive costs the most GPU time.
+In the TouchOSC layout, **Fractals panel** (in the ISF card) opens buttons for each shader
+and sliders for `speed`, `zoom`, `color` and `detail`. The ISF parameter fields send the rest
+as floats. Dive costs the most GPU time.
 If a panel drops below 60 fps, lower `detail` or the `[isf]` resolution cap.

@@ -4,6 +4,10 @@ local ready = false
 local editing, buffer, shift = nil, '', false
 local pendingMaster, lastMaster = nil, 0
 local pendingPersistence, lastPersistence = nil, 0
+-- Fractal sliders: ISF input -> {low, high}; pending values coalesce per input.
+local fractalRanges = {speed={0,4}, zoom={0.5,4}, color={0,1}, detail={0,1}}
+local fractalOrder = {'speed','zoom','color','detail'}
+local pendingFractal, lastFractal = {}, {}
 local replies, pingDeadline, lastStatus = {}, nil, 0
 local requests, requestOrder, displayed = {}, {}, {}
 local serial = 0
@@ -115,6 +119,7 @@ end
 function init()
   ready = false
   pendingPersistence = nil
+  pendingFractal = {}
   pendingMaster, pingDeadline, replies = nil, nil, {}
   editing, buffer, shift = nil, '', false
   for _, name in ipairs({'target','playlist','preset','duration','beat','input','values','event','kind','reply_port'}) do
@@ -122,6 +127,7 @@ function init()
   end
   clearAcknowledgements()
   control('keyboard').visible = false
+  control('fractal_panel').visible = false
   status('Ready. Configure OSC connection 1, then Ping. Nothing sent on open.')
   ready = true
 end
@@ -131,6 +137,7 @@ function onReceiveNotify(action, value)
   if action == 'edit' then
     pendingMaster = nil
     pendingPersistence = nil
+    pendingFractal = {}
     editing, buffer, shift = value, fields[value], false
     label('keyboard_title', 'EDIT ' .. string.upper(value) .. '  /  APPLY CHANGES WITH DONE')
     label('keyboard_buffer', buffer .. '|')
@@ -153,12 +160,19 @@ function onReceiveNotify(action, value)
   end
   if editing then return end
   if action == 'target' then
-    pendingMaster=nil; pendingPersistence=nil; clearAcknowledgements(); setField('target', value)
+    pendingMaster=nil; pendingPersistence=nil; pendingFractal={}; clearAcknowledgements(); setField('target', value)
     status('Target: ' .. value .. '. Controls show local values, not panel state.')
   elseif action == 'persistence' then
     if not finite(value) then return end
     pendingPersistence = 1 + 9 * math.max(0, math.min(1, value))
     label('persistence_value', string.format('%.1fx', pendingPersistence))
+  elseif action == 'fractal_param' then
+    local name, x = type(value)=='table' and value[1], type(value)=='table' and value[2]
+    local range = fractalRanges[name]
+    if not range or not finite(x) then return end
+    local n = range[1] + (range[2]-range[1]) * math.max(0, math.min(1, x))
+    pendingFractal[name] = n
+    label('fractal_' .. name .. '_value', string.format('%.2f', n))
   elseif action == 'master' then
     local n = math.max(0, math.min(1, value))
     pendingMaster = n
@@ -180,6 +194,13 @@ function onReceiveNotify(action, value)
     local name=trim(fields.event)
     if name=='' then status('Enter an event name first.'); return end
     send('isf_event', {argument('s', name)})
+  elseif action == 'fractal_panel' then
+    control('fractal_panel').visible = value == 'open'
+  elseif action == 'fractal' then
+    if type(value)~='string' or not value:match('^[a-z_]+$') then return end
+    send('mode', {argument('s', 'isf')})
+    if value == 'rotate' then send('playlist', {argument('s', 'fractal')}, true)
+    else send('preset', {argument('s', 'fractal/' .. value .. '.fs')}, true) end
   elseif action == 'fluid' then
     send('mode', {argument('s', 'fluid')})
     send('preset', {argument('s', value)}, true)
@@ -236,6 +257,12 @@ function update()
   if pendingPersistence and now-lastPersistence>=34 then
     send('fluid_persistence', {argument('f', pendingPersistence)})
     pendingPersistence=nil; lastPersistence=now
+  end
+  for _, name in ipairs(fractalOrder) do
+    if pendingFractal[name] and now-(lastFractal[name] or 0)>=34 then
+      send('isf_param', {argument('s', name), argument('f', pendingFractal[name])})
+      pendingFractal[name]=nil; lastFractal[name]=now
+    end
   end
   if pendingMaster and now-lastMaster>=34 then
     send('master', {argument('f', pendingMaster)})
