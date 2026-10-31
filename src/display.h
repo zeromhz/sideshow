@@ -17,10 +17,12 @@ public:
     void swap();
     int drawableWidth() const;
     int drawableHeight() const;
+    int refreshRate() const { return refreshRate_; }  // Hz; 0 = unknown
 
 private:
     SDL_Window* window_ = nullptr;
     SDL_GLContext context_ = nullptr;
+    int refreshRate_ = 0;
 };
 
 }  // namespace sideshow

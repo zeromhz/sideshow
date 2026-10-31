@@ -73,7 +73,7 @@ RenderSize scaledRenderSize(int width, int height, double scale) {
             std::max(1, static_cast<int>(std::lround(height * scale)))};
 }
 
-int swapIntervalFor(int refreshRate, int fps) {
+int refreshesPerFrame(int refreshRate, int fps) {
     if (refreshRate <= 0 || fps <= 0) return 1;
     // +1 Hz tolerance: 59.94 Hz modes can report 59 and should still swap every second vblank.
     return std::max(1, (refreshRate + 1) / fps);

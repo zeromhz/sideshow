@@ -3,11 +3,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstring>
 #include <exception>
 #include <optional>
 #include <string>
+#include <thread>
 #include <variant>
 
 #include "audio_capture.h"
@@ -17,6 +19,7 @@
 #include "config.h"
 #include "display.h"
 #include "log.h"
+#include "display_mode.h"
 #include "osc_server.h"
 #include "output_level.h"
 #include "preset_catalog.h"
@@ -62,6 +65,10 @@ int main(int argc, char** argv) {
     const Config& config = loaded.config;
     logInfo("sideshow-player starting as " + config.panelId + " (config: " + configPath + ")");
 
+    // KMS/DRM: make each swap wait for its page flip, so a swap returns at the vblank where the
+    // frame appears. The frame pacing below uses that to hold every frame for whole refreshes.
+    // Builds that ignore the hint keep the plain frame limiter.
+    SDL_SetHint(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
         logError(std::string("SDL_Init failed (no connected display? systemd will retry): ") +
                  SDL_GetError());
@@ -110,6 +117,30 @@ int main(int argc, char** argv) {
         // does not cause a burst to catch up.
         const Uint64 counterRate = SDL_GetPerformanceFrequency();
         const Uint64 framePeriod = counterRate / static_cast<Uint64>(std::max(1, config.display.fps));
+        // Vblank alignment: with holdRefreshes = 2 (60 Hz at 30 fps), a frame is swapped
+        // only after the vblank that follows the previous frame's flip, so it flips on the one
+        // after: exactly two refreshes per frame, with the whole time available for rendering.
+        const int refresh = display.refreshRate();
+        const int holdRefreshes = refreshesPerFrame(refresh, config.display.fps);
+        const Uint64 refreshPeriod = refresh > 0 ? counterRate / static_cast<Uint64>(refresh) : 0;
+        const Uint64 flipMargin = counterRate * 3 / 2000;  // 1.5 ms past the in-between vblank
+        Uint64 lastFlip = 0;
+        if (holdRefreshes > 1) {
+            logInfo("frame pacing: each frame held for " + std::to_string(holdRefreshes) +
+                    " refreshes at " + std::to_string(refresh) + " Hz");
+        }
+        auto waitUntil = [counterRate](Uint64 deadline) {
+            Uint64 counter = SDL_GetPerformanceCounter();
+            if (counter >= deadline) return counter;
+            // Sleep to within 0.3 ms of the deadline, then yield the rest.
+            const Uint64 slack = counterRate * 3 / 10000;
+            if (deadline - counter > slack) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(
+                    (deadline - counter - slack) * 1000000000ull / counterRate));
+            }
+            while ((counter = SDL_GetPerformanceCounter()) < deadline) std::this_thread::yield();
+            return counter;
+        };
         Uint64 nextFrame = SDL_GetPerformanceCounter() + framePeriod;
         Uint32 lastTicks = SDL_GetTicks();
         Uint32 fpsWindowStart = lastTicks;
@@ -171,7 +202,12 @@ int main(int argc, char** argv) {
                 bootOverlay.draw(overlayAlpha, display.drawableWidth(), display.drawableHeight());
             }
             brightness.apply(output.brightness(),display.drawableWidth(),display.drawableHeight());
+            if (holdRefreshes > 1 && lastFlip != 0) {
+                waitUntil(lastFlip + static_cast<Uint64>(holdRefreshes - 1) * refreshPeriod +
+                          flipMargin);
+            }
             display.swap();
+            lastFlip = SDL_GetPerformanceCounter();
 
             ++framesInWindow;
             if (now - fpsWindowStart >= 1000) {
@@ -181,14 +217,7 @@ int main(int argc, char** argv) {
                 framesInWindow = 0;
             }
 
-            Uint64 counter = SDL_GetPerformanceCounter();
-            if (counter < nextFrame) {
-                // SDL_Delay has millisecond resolution: sleep the whole milliseconds, then yield
-                // until the deadline.
-                const Uint64 wait = (nextFrame - counter) * 1000 / counterRate;
-                if (wait > 0) SDL_Delay(static_cast<Uint32>(wait));
-                while ((counter = SDL_GetPerformanceCounter()) < nextFrame) SDL_Delay(0);
-            }
+            const Uint64 counter = waitUntil(nextFrame);
             nextFrame += framePeriod;
             if (nextFrame < counter) nextFrame = counter;
         }

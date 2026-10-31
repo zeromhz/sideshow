@@ -4,6 +4,7 @@ extern const char* vertex;
 extern const char* blurVertex;
 extern const char* display;
 extern const char* copy;
+extern const char* present;
 extern const char* clear;
 extern const char* splat;
 extern const char* advection;

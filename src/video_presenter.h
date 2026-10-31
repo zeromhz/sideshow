@@ -13,6 +13,7 @@ private:
     fluid_gl::Program program_;
     fluid_gl::VertexArray vao_;
     GLuint texture_=0;
+    int textureWidth_=0,textureHeight_=0;
     int width_,height_,rotation_=0;
     double aspect_=1;
 };

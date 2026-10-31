@@ -31,6 +31,7 @@ float envelope(float previous, float target, float dt) {
 }
 
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
 vec3 palette(float t) { return 0.5 + 0.5 * cos(6.2831853 * (t + vec3(0.0, 0.33, 0.67))); }
 
 // Orbit of c0: 0, c0, ... reaches a repelling fixed point after PREPERIOD steps.
@@ -82,18 +83,43 @@ void main() {
     float n = 0.0;
     float m = 0.0;
     bool escaped = false;
-    for (int i = 0; i < 512; i++) {
+    vec2 reference = vec2(0.0);
+    // The first PREPERIOD steps follow the reference orbit onto its repelling fixed point z*.
+    // They are iterated exactly; no pixel can escape or rebase this early.
+    for (int i = 0; i < PREPERIOD; i++) {
+        derivative = 2.0 * cmul(z, derivative) + vec2(1.0, 0.0);
+        dz = 2.0 * cmul(reference, dz) + cmul(dz, dz) + dc;
+        ref = i + 1;
+        reference = orbit(ref);
+        z = reference + dz;
+    }
+    // Near z* the offset grows linearly, dz' = lambda dz + dc with lambda = 2 z*, for dozens of
+    // steps before it becomes large. Jump those steps in closed form: with A = dc / (lambda - 1),
+    // dz_k = lambda^k (dz + A) - A, and the derivative likewise with B = 1 / (lambda - 1). Stop
+    // while |dz| is still 1e-4 of |z*|, so the dropped dz^2 term stays negligible.
+    vec2 lambda = 2.0 * reference;
+    vec2 A = cdiv(dc, lambda - vec2(1.0, 0.0));
+    vec2 B = cdiv(vec2(1.0, 0.0), lambda - vec2(1.0, 0.0));
+    float k = max(floor(log(1e-4 * length(reference) / max(length(dz + A), 1e-30)) / LOG_RHO), 0.0);
+    float turnK = k * atan(lambda.y, lambda.x);
+    vec2 lambdaK = exp(k * LOG_RHO) * vec2(cos(turnK), sin(turnK));
+    dz = cmul(lambdaK, dz + A) - A;
+    derivative = cmul(lambdaK, derivative + B) - B;
+    z = reference + dz;
+    int start = PREPERIOD + int(k);
+    for (int j = 0; j < 512; j++) {
+        int i = start + j;
         if (i >= limit) break;
-        vec2 reference = orbit(ref);
-        derivative = 2.0 * cmul(reference + dz, derivative) + vec2(1.0, 0.0);
+        derivative = 2.0 * cmul(z, derivative) + vec2(1.0, 0.0);
         dz = 2.0 * cmul(reference, dz) + cmul(dz, dz) + dc;
         ref = min(ref + 1, PREPERIOD);
-        z = orbit(ref) + dz;
+        reference = orbit(ref);
+        z = reference + dz;
         m = dot(z, z);
         if (m > 1e4) { escaped = true; n = float(i); break; }
         // Rebase onto the start of the reference orbit when the pixel's orbit passes
         // closer to zero than its offset; this keeps the perturbation accurate.
-        if (m < dot(dz, dz)) { dz = z; ref = 0; }
+        if (m < dot(dz, dz)) { dz = z; ref = 0; reference = vec2(0.0); }
     }
 
     vec3 col;

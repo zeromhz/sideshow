@@ -50,7 +50,9 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     for (const auto& file : files) paths.push_back(file.c_str());
 
     projectm_playlist_clear(playlist_);
-    projectm_playlist_add_presets(playlist_, paths.data(), static_cast<uint32_t>(paths.size()), false);
+    // Allow duplicates: the catalog's paths are already unique and sorted, and projectM's
+    // duplicate check is a linear search per item (quadratic for the 8,000-preset pack).
+    projectm_playlist_add_presets(playlist_, paths.data(), static_cast<uint32_t>(paths.size()), true);
     playlistName_ = name;
     failedIndex_.reset();
     badPresetsPending_ = false;

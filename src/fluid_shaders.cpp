@@ -360,6 +360,21 @@ const char* blur=R"GLSL(out vec4 fragColor;
         fragColor = sum;
     }
 )GLSL";
+// Stretches the dye-resolution composite over the screen and dithers it by one 8-bit step, so
+// smooth glows do not band.
+const char* present=R"GLSL(out vec4 fragColor;
+    in vec2 vUv;
+    uniform sampler2D uTexture;
+    uniform sampler2D uDithering;
+    uniform vec2 ditherScale;
+    uniform float ditherAmount;
+
+    void main () {
+        vec3 c = texture(uTexture, vUv).rgb;
+        float noise = texture(uDithering, vUv * ditherScale).r * 2.0 - 1.0;
+        fragColor = vec4(c + ditherAmount * noise / 255.0, 1.0);
+    }
+)GLSL";
 const char* display=R"GLSL(out vec4 fragColor;
 
     
@@ -415,9 +430,7 @@ const char* display=R"GLSL(out vec4 fragColor;
     #endif
 
     #ifdef BLOOM
-        float noise = texture(uDithering, vUv * ditherScale).r;
-        noise = noise * 2.0 - 1.0;
-        bloom += noise / 255.0;
+        // Dithering happens in the present pass, at screen resolution.
         bloom = linearToGamma(bloom);
         c += bloom;
     #endif

@@ -47,6 +47,21 @@ void VideoPresenter::upload(const VideoFrame& frame) {
        size_t(frame.stride)*size_t(frame.height)>frame.rgba.size() ||
        !std::isfinite(frame.pixelAspect) || frame.pixelAspect<=0)
         throw std::runtime_error("Invalid video frame dimensions or stride");
+    // Same-sized frames overwrite the existing texture instead of allocating a new one each
+    // frame. A failed upload raises a GL error and leaves the old picture untouched.
+    if(texture_ && frame.width==textureWidth_ && frame.height==textureHeight_) {
+        {
+        fluid_gl::StateGuard state;UnpackGuard unpack;
+        glActiveTexture(GL_TEXTURE0);glBindSampler(0,0);glBindTexture(GL_TEXTURE_2D,texture_);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH,frame.stride/4);
+        glTexSubImage2D(GL_TEXTURE_2D,0,0,0,frame.width,frame.height,GL_RGBA,GL_UNSIGNED_BYTE,frame.rgba.data());
+        if(glGetError()!=GL_NO_ERROR) throw std::runtime_error("Video texture upload failed");
+        }
+        rotation_=frame.rotationDegrees;
+        aspect_=double(frame.width)*frame.pixelAspect/frame.height;
+        if(rotation_==90 || rotation_==270) aspect_=1.0/aspect_;
+        return;
+    }
     GLuint candidate=0;
     {
     fluid_gl::StateGuard state;UnpackGuard unpack;
@@ -59,7 +74,7 @@ void VideoPresenter::upload(const VideoFrame& frame) {
     if(!candidate || glGetError()!=GL_NO_ERROR) {if(candidate) glDeleteTextures(1,&candidate);throw std::runtime_error("Video texture upload failed");}
     }
     if(texture_) glDeleteTextures(1,&texture_);
-    texture_=candidate;rotation_=frame.rotationDegrees;
+    texture_=candidate;textureWidth_=frame.width;textureHeight_=frame.height;rotation_=frame.rotationDegrees;
     aspect_=double(frame.width)*frame.pixelAspect/frame.height;
     if(rotation_==90 || rotation_==270) aspect_=1.0/aspect_;
 }

@@ -33,6 +33,10 @@ private:
     VideoPresenter presenter_;
     VideoPlayback clock_;
     uint64_t session_,generation_=0,activeGeneration_=0;
+    // Frames are released up to half a render period early. Without it, a clip whose frame rate
+    // matches the render rate lands on the boundary every frame, and timing jitter alternately
+    // repeats one frame and skips the next.
+    double releaseLead_;
     bool loading_=false;
     PreparationResult preparation_{PreparationState::Pending,{}};
     VisualSelection selection_;
