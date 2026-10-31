@@ -101,7 +101,9 @@ configuration, FFmpeg dependencies, architecture limits and hardware validation.
 
 Set `[visuals] mode = "isf"` for ISF startup. `[isf]` accepts `root` (default
 `/opt/sideshow/isf`), `preset` (default `examples/plasma.fs`, otherwise exact relative `.fs` ID),
-`max_width` (1280) and `max_height` (720). Dimensions must be integers 1–4096;
+`max_width` (1280) and `max_height` (720), and an optional `[isf.scale]` table of per-shader
+render scales (0.25–1) keyed by shader ID, such as `"fractal/dive.fs" = 0.6`; it overrides a
+shader's own `SIDESHOW_RENDER_SCALE` (see [ISF](isf.md)). Dimensions must be integers 1–4096;
 invalid values warn and retain defaults. Portrait swaps the caps. Development
 setup uses `deps/isf` and `examples/plasma.fs`. To boot into a fractal, set
 `preset = "fractal/julia.fs"` (or any other shader in the `fractal` folder, such as `fractal/nova.fs`). Restart after config or catalog

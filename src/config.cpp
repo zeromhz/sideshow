@@ -121,6 +121,17 @@ ConfigResult parseConfig(std::string_view tomlText) {
         readKey(root,"isf",key,value,[](int n){return n>0&&n<=4096;},w);
     };
     isfDimension("max_width",c.isf.maxWidth);isfDimension("max_height",c.isf.maxHeight);
+    if(auto node=root["isf"]["scale"]) {
+        if(const auto* table=node.as_table()) {
+            for(const auto& [key,value]:*table) {
+                const std::string id(key.str());
+                const auto scale=value.value<double>();
+                if(!validIsfId(id) || !scale || !(*scale>=0.25 && *scale<=1.0))
+                    w.push_back("isf.scale.\""+id+"\": expected a shader ID and a number 0.25-1, ignoring");
+                else c.isf.scale[id]=*scale;
+            }
+        } else w.push_back("isf.scale: expected a table of shader IDs, ignoring");
+    }
     readKey(root, "video", "root", c.video.root, nonEmpty, w);
     readKey(root, "video", "preset", c.video.preset,
             [](const std::string& v) { return v.empty() || validVideoId(v); }, w);

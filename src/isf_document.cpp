@@ -69,6 +69,7 @@ IsfDocument parseIsfDocument(std::string id,std::string fragment,std::string ver
    doc.inputs.push_back(std::move(in));
   }
  }
+ if(j.count("SIDESHOW_RENDER_SCALE")){double scale=number(j["SIDESHOW_RENDER_SCALE"]);if(scale<0.25||scale>1)bad("SIDESHOW_RENDER_SCALE outside 0.25..1");doc.renderScale=scale;}
  if(j.count("PASSES")){if(!j["PASSES"].is_array()||j["PASSES"].size()>8)bad("PASSES must have at most 8 entries");for(const auto& obj:j["PASSES"]){if(!obj.is_object())bad("pass must be object");IsfPass p;if(obj.count("TARGET")){p.target=obj["TARGET"].get<std::string>();name(p.target,names);}p.width=dimension(obj,"WIDTH");p.height=dimension(obj,"HEIGHT");for(auto key:{"PERSISTENT","FLOAT"})if(obj.count(key)&&!obj[key].is_boolean())bad("pass flags must be boolean");p.persistent=obj.value("PERSISTENT",false);p.floating=obj.value("FLOAT",false);if(p.persistent&&p.target.empty())bad("persistent pass needs TARGET");doc.passes.push_back(std::move(p));}}
  if(j.count("IMPORTED")){auto& imports=j["IMPORTED"];if(!imports.is_object()||imports.size()>16)bad("IMPORTED must have at most 16 named entries");for(auto it=imports.begin();it!=imports.end();++it){name(it.key(),names);auto path=it.value().at("PATH").get<std::string>();resolveIsfImport(doc.id,path);doc.imports.push_back({it.key(),path});}}
  return doc;

@@ -79,4 +79,11 @@ int refreshesPerFrame(int refreshRate, int fps) {
     return std::max(1, (refreshRate + 1) / fps);
 }
 
+RenderSize isfRenderSize(int width, int height, int maxWidth, int maxHeight, double scale) {
+    if (height > width) std::swap(maxWidth, maxHeight);
+    const double cap = std::min({1.0, double(maxWidth) / std::max(1, width),
+                                 double(maxHeight) / std::max(1, height)});
+    return scaledRenderSize(std::max(1, int(width * cap)), std::max(1, int(height * cap)), scale);
+}
+
 }  // namespace sideshow

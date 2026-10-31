@@ -56,3 +56,7 @@ root = "/opt/sideshow/isf"
 preset = "examples/plasma.fs"
 max_width = 1280
 max_height = 720
+
+# Optional per-shader render scale (0.25..1) for heavy shaders, e.g.:
+# [isf.scale]
+# "fractal/dive.fs" = 0.6

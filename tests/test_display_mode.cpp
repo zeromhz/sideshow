@@ -109,3 +109,18 @@ TEST_CASE("refreshesPerFrame shows each frame for whole refreshes without unders
     CHECK(refreshesPerFrame(24, 30) == 1);
     CHECK(refreshesPerFrame(0, 30) == 1);   // unknown refresh
 }
+
+TEST_CASE("isfRenderSize caps to the ISF limit, then applies the shader's scale") {
+    auto s = isfRenderSize(1920, 1080, 1280, 720, 1.0);
+    CHECK(s.width == 1280);
+    CHECK(s.height == 720);
+    s = isfRenderSize(1920, 1080, 1280, 720, 0.5);
+    CHECK(s.width == 640);
+    CHECK(s.height == 360);
+    s = isfRenderSize(1080, 1920, 1280, 720, 0.75);  // portrait swaps the cap
+    CHECK(s.width == 540);
+    CHECK(s.height == 960);
+    s = isfRenderSize(640, 360, 1280, 720, 0.5);  // under the cap: only the scale applies
+    CHECK(s.width == 320);
+    CHECK(s.height == 180);
+}

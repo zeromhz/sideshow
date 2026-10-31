@@ -31,3 +31,10 @@ TEST_CASE("ISF rejects malformed or unsupported metadata before runtime use","[i
   CHECK_THROWS(parse(json+"]}"));
  }
 }
+TEST_CASE("ISF render scale is optional and bounded","[isf]") {
+ CHECK(parse("{}").renderScale==1);
+ CHECK(parse(R"({"SIDESHOW_RENDER_SCALE":0.5})").renderScale==0.5);
+ CHECK(parse(R"({"SIDESHOW_RENDER_SCALE":1})").renderScale==1);
+ for(auto json:{R"({"SIDESHOW_RENDER_SCALE":0.1})",R"({"SIDESHOW_RENDER_SCALE":1.5})",R"({"SIDESHOW_RENDER_SCALE":"half"})"})
+  CHECK_THROWS(parse(json));
+}

@@ -1,5 +1,6 @@
 #include "isf_backend.h"
 #include "isf_playback.h"
+#include "display_mode.h"
 #include "log.h"
 #include <algorithm>
 #include <cmath>
@@ -19,6 +20,7 @@ struct IsfBackend::Impl {
     IsfAudio audio;
     bool prepared = false, dirty = false;
     double time = 0;
+    double scale = 1;  // render scale of the current shader
 
     Impl(const BackendInit& init, IsfLoader& l, IsfContext& c, IsfBudget& b)
         : loader(l), context(c), budget(b), config(init.config.isf),
@@ -26,12 +28,15 @@ struct IsfBackend::Impl {
           playback(init.selection, init.playback, std::random_device{}()) {}
     ~Impl() { loader.cancel(session); }
 
-    std::pair<int, int> dimensions() const {
-        int maxWidth = config.maxWidth, maxHeight = config.maxHeight;
-        if (height > width) std::swap(maxWidth, maxHeight);
-        double scale = std::min({1.0, double(maxWidth) / std::max(1, width),
-                               double(maxHeight) / std::max(1, height)});
-        return {std::max(1, int(width * scale)), std::max(1, int(height * scale))};
+    // A panel's [isf.scale] entry wins over the shader's own SIDESHOW_RENDER_SCALE.
+    double scaleFor(const IsfDocument& document) const {
+        auto found = config.scale.find(document.id);
+        return found != config.scale.end() ? found->second : document.renderScale;
+    }
+
+    std::pair<int, int> dimensions(double renderScale) const {
+        auto size = isfRenderSize(width, height, config.maxWidth, config.maxHeight, renderScale);
+        return {size.width, size.height};
     }
 
     void dispatch() {
@@ -55,7 +60,7 @@ struct IsfBackend::Impl {
         std::string why;
         auto proposed = *parameters;
         if (!proposed.apply(command, why)) return {"rejected", why};
-        auto size = dimensions();
+        auto size = dimensions(scale);
         if (!runtime->update(proposed, size.first, size.second, why, prepared)) {
             return {"rejected", why};
         }
@@ -78,7 +83,8 @@ struct IsfBackend::Impl {
         if (event->kind == IsfLoadKind::Failed) { fail(event->generation, event->error); return; }
         if (event->kind != IsfLoadKind::Source) return;
         try {
-            auto size = dimensions();
+            const double candidateScale = scaleFor(event->source->document);
+            auto size = dimensions(candidateScale);
             auto candidate = std::make_unique<IsfRuntime>(context, budget, event->source,
                                                          size.first, size.second);
             auto values = std::make_unique<IsfParameters>(event->source->document.inputs);
@@ -90,6 +96,7 @@ struct IsfBackend::Impl {
             candidate->draw(*values, audio, 0, 0, 0);
             if (!playback.commit(event->generation, event->source->document.id)) return;
             runtime = std::move(candidate);
+            scale = candidateScale;
             parameters = std::move(values);
             lastGoodParameters = std::make_unique<IsfParameters>(*parameters);
             prepared = true;
@@ -166,7 +173,7 @@ void IsfBackend::resize(int width, int height) {
     state.width = width;
     state.height = height;
     if (!state.runtime) return;
-    auto size = state.dimensions();
+    auto size = state.dimensions(state.scale);
     std::string why;
     if (!state.runtime->update(*state.parameters, size.first, size.second, why, state.prepared))
         logWarn("ISF resize: " + why);

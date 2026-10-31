@@ -30,6 +30,10 @@ struct RenderSize {
 // the aspect ratio is kept: 1920x1080 at 2/3 gives 1280x720. Never smaller than 1x1.
 RenderSize scaledRenderSize(int width, int height, double scale);
 
+// ISF internal size: the drawable capped to maxWidth x maxHeight (swapped for portrait), keeping
+// the aspect ratio, then scaled by `scale` (0 < scale <= 1).
+RenderSize isfRenderSize(int width, int height, int maxWidth, int maxHeight, double scale);
+
 // Refreshes to hold each frame for, so frames show for whole refreshes without dropping below
 // `fps`: floor((refresh + 1) / fps), at least 1 (1 Hz tolerance for 59.94 Hz modes reported as
 // 59). 60 Hz at 30 fps holds each frame for two refreshes; 50 Hz at 30 fps shows every refresh

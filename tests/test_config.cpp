@@ -180,6 +180,14 @@ TEST_CASE("ISF configuration validates mode library and render bounds","[isf]") 
  auto bad=sideshow::parseConfig("[isf]\nmax_width=4097\nmax_height=0\npreset='../a.fs'\n");CHECK(bad.warnings.size()==3);CHECK(bad.config.isf.maxWidth==1280);
 }
 
+TEST_CASE("ISF per-shader render scales accept shader IDs and 0.25-1","[isf]") {
+ auto r=sideshow::parseConfig("[isf.scale]\n\"fractal/dive.fs\" = 0.6\n\"plasma.fs\" = 1\n");
+ CHECK(r.warnings.empty());REQUIRE(r.config.isf.scale.size()==2);CHECK(r.config.isf.scale.at("fractal/dive.fs")==0.6);
+ auto bad=sideshow::parseConfig("[isf.scale]\n\"a.fs\" = 0.1\n\"../b.fs\" = 0.5\n\"c.fs\" = 'half'\n\"d.fs\" = 0.75\n");
+ CHECK(bad.warnings.size()==3);REQUIRE(bad.config.isf.scale.size()==1);CHECK(bad.config.isf.scale.at("d.fs")==0.75);
+ CHECK(sideshow::parseConfig("[isf]\nscale = 0.5\n").warnings.size()==1);
+}
+
 TEST_CASE("Config: fluid persistence defaults and rejects unsafe multipliers") {
     CHECK(parseConfig("").config.fluid.persistence == 1.0f);
     CHECK(parseConfig("[fluid]\npersistence = 4.0").config.fluid.persistence == 4.0f);

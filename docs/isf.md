@@ -89,6 +89,22 @@ preserving aspect ratio; caps swap for portrait. Each must be an integer 1–409
 The actual GPU texture limit also applies. Floating pass targets are never silently
 downgraded; unsupported formats reject the shader.
 
+Heavy shaders can render below the cap. A shader can set its own scale with the header key
+`"SIDESHOW_RENDER_SCALE": 0.75` (0.25–1; other ISF hosts ignore it), and each panel can
+override any shader by ID in its config:
+
+```toml
+[isf.scale]
+"fractal/dive.fs" = 0.6
+"fractal/nebula.fs" = 0.75
+```
+
+The shader then renders at that fraction of the capped width and height (same aspect ratio;
+`RENDERSIZE` reports the smaller size), and the result is stretched to the screen. Cost falls
+with the pixel count, so 0.75 is about 56% of the work and 0.5 about 25%; fine detail and
+pixel-sized features (such as the nebula's stars) get softer and larger. The bundled shaders
+all render at full scale; set panel overrides after measuring frame rates with `ping`.
+
 ## Limits and trust
 
 Shaders are executable GPU programs: use trusted shaders. File reading and image
