@@ -25,10 +25,10 @@ std::pair<int,int> dimensions(int resolution,int w,int h) {
 }
 struct Fields {
     Pair velocity,dye,pressure;
-    Target curl,divergence,bloom,sunrays,sunTemp;
+    Target curl,divergence,bloom,sunrays,sunTemp,sunMask,composite;
     std::vector<Target> bloomLevels;
     Fields(std::pair<int,int> sim,std::pair<int,int> dyeSize,std::pair<int,int> bloomSize,
-           std::pair<int,int> rays,fluid_gl::Capabilities caps)
+           std::pair<int,int> rays,std::pair<int,int> compositeSize,fluid_gl::Capabilities caps)
         :velocity(sim.first,sim.second,caps.vector,caps.linear),
          dye(dyeSize.first,dyeSize.second,GL_RGBA16F,caps.linear),
          pressure(sim.first,sim.second,caps.scalar,false),
@@ -36,7 +36,11 @@ struct Fields {
          divergence(sim.first,sim.second,caps.scalar,fluid_gl::externalFormat(caps.scalar),false),
          bloom(bloomSize.first,bloomSize.second,GL_RGBA16F,GL_RGBA,caps.linear),
          sunrays(rays.first,rays.second,caps.scalar,fluid_gl::externalFormat(caps.scalar),caps.linear),
-         sunTemp(rays.first,rays.second,caps.scalar,fluid_gl::externalFormat(caps.scalar),caps.linear) {
+         sunTemp(rays.first,rays.second,caps.scalar,fluid_gl::externalFormat(caps.scalar),caps.linear),
+         // The sunrays mask is only read at sunrays resolution, so draw it at that size.
+         sunMask(rays.first,rays.second,GL_RGBA16F,GL_RGBA,caps.linear),
+         // Shading, bloom and sunrays are combined at dye resolution, then stretched to the screen.
+         composite(compositeSize.first,compositeSize.second,GL_RGBA16F,GL_RGBA,caps.linear) {
         int w=bloomSize.first,h=bloomSize.second;
         for(int i=0;i<8;++i){w/=2;h/=2;if(w<2||h<2)break;bloomLevels.emplace_back(w,h,GL_RGBA16F,GL_RGBA,caps.linear);}
     }
@@ -61,6 +65,7 @@ struct FluidRenderer::Impl {
     Program mask{fluid_shader::vertex,fluid_shader::sunraysMask};
     Program rays{fluid_shader::vertex,fluid_shader::sunrays};
     Program blur{fluid_shader::blurVertex,fluid_shader::blur};
+    Program present{fluid_shader::vertex,fluid_shader::present};
     std::array<std::unique_ptr<Program>,8> displays;
     Target noise{8,8,GL_RGBA16F,GL_RGBA,false};
     std::unique_ptr<Fields> fields;
@@ -85,7 +90,11 @@ struct FluidRenderer::Impl {
     void resize(int w,int h) {
         if(w<=0||h<=0|| (w==width&&h==height))return;
         fluid_gl::resetState();
-        auto replacement=std::make_unique<Fields>(dimensions(config.simulationResolution,w,h),dimensions(config.dyeResolution,w,h),dimensions(256,w,h),dimensions(196,w,h),caps);
+        // The composite matches the dye texture (no finer detail exists), but never exceeds the
+        // screen; without linear filtering it stays at screen size so the stretch is 1:1.
+        auto dyeSize=dimensions(config.dyeResolution,w,h);
+        std::pair<int,int> compositeSize=caps.linear && dyeSize.first<w && dyeSize.second<h ? dyeSize : std::pair<int,int>{w,h};
+        auto replacement=std::make_unique<Fields>(dimensions(config.simulationResolution,w,h),dyeSize,dimensions(256,w,h),dimensions(196,w,h),compositeSize,caps);
         fields.swap(replacement);width=w;height=h;
     }
     void begin(Program& p,const Target& source) {
@@ -141,16 +150,19 @@ struct FluidRenderer::Impl {
             begin(bloomFinal,*last);bloomFinal.texture("uTexture",last->texture,0);bloomFinal.one("intensity",p.bloomIntensity);draw(f.bloom);
         }
         if(p.sunrays) {
-            begin(mask,f.dye.read);mask.texture("uTexture",f.dye.read.texture,0);draw(f.dye.write);
-            begin(rays,f.dye.write);rays.texture("uTexture",f.dye.write.texture,0);rays.one("weight",p.sunraysWeight);draw(f.sunrays);
+            begin(mask,f.dye.read);mask.texture("uTexture",f.dye.read.texture,0);draw(f.sunMask);
+            begin(rays,f.sunMask);rays.texture("uTexture",f.sunMask.texture,0);rays.one("weight",p.sunraysWeight);draw(f.sunrays);
             begin(blur,f.sunrays);blur.two("texelSize",1.0f/f.sunrays.width,0);blur.texture("uTexture",f.sunrays.texture,0);draw(f.sunTemp);
             blur.two("texelSize",0,1.0f/f.sunrays.height);blur.texture("uTexture",f.sunTemp.texture,0);draw(f.sunrays);
         }
         auto& display=*displays[(p.shading?1:0)|(p.bloom?2:0)|(p.sunrays?4:0)];
-        begin(display,f.dye.read);display.two("texelSize",1.0f/width,1.0f/height);
+        begin(display,f.composite);
         display.texture("uTexture",f.dye.read.texture,0);display.texture("uBloom",f.bloom.texture,1);
-        display.texture("uDithering",noise.texture,2);display.texture("uSunrays",f.sunrays.texture,3);
-        display.two("ditherScale",width/8.0f,height/8.0f);display.one("uInvert",p.ink?1:0);
+        display.texture("uSunrays",f.sunrays.texture,3);display.one("uInvert",p.ink?1:0);
+        draw(f.composite);
+        begin(present,f.composite);present.texture("uTexture",f.composite.texture,0);
+        present.texture("uDithering",noise.texture,1);present.two("ditherScale",width/8.0f,height/8.0f);
+        present.one("ditherAmount",p.bloom?1.0f:0.0f);
         glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,width,height);glDrawArrays(GL_TRIANGLES,0,3);
         glActiveTexture(GL_TEXTURE0);glBindVertexArray(0);glUseProgram(0);
         if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("Fluid rendering GL error");
