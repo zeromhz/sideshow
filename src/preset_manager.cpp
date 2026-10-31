@@ -126,7 +126,9 @@ bool PresetManager::loadPreset(const std::string& name) {
         pruneBadPresets();        // don't let the playlist reach it later
         return false;
     }
-    pruneBadPresets();
+    // Pruning walks the whole playlist (8,000 presets in the default pack); only do it when a
+    // failure has marked presets bad since the last prune.
+    if (badPresetsPending_) pruneBadPresets();
     switchRequested_.reset();
     failedIndex_.reset();
     consecutiveFailures_ = 0;
