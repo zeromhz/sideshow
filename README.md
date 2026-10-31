@@ -252,4 +252,6 @@ tools/osc_send.py isf_param speed 2.0
 In the TouchOSC layout, **Fractals panel** (in the ISF card) opens buttons for each shader
 and sliders for `speed`, `zoom`, `color` and `detail`. The ISF parameter fields send the rest
 as floats. Dive costs the most GPU time.
-If a panel drops below 30 fps, lower `detail` or the `[isf]` resolution cap.
+If a panel drops below 30 fps, lower `detail`, or render that shader at a lower resolution
+with an `[isf.scale]` entry in the panel's config (for example `"fractal/dive.fs" = 0.6`; see
+[ISF](docs/isf.md)).

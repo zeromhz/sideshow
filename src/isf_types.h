@@ -16,5 +16,7 @@ struct IsfInput {
 };
 struct IsfPass {std::string target,width,height;bool persistent=false,floating=false;};
 struct IsfImport {std::string name,path;};
-struct IsfDocument {std::string id,fragment,vertex;std::vector<IsfInput> inputs;std::vector<IsfPass> passes;std::vector<IsfImport> imports;};
+// renderScale: optional "SIDESHOW_RENDER_SCALE" header key (0.25-1); the shader renders at that
+// fraction of the capped ISF size, which the presenter stretches to the screen.
+struct IsfDocument {std::string id,fragment,vertex;std::vector<IsfInput> inputs;std::vector<IsfPass> passes;std::vector<IsfImport> imports;double renderScale=1;};
 }

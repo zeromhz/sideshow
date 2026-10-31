@@ -2,6 +2,7 @@
 
 #include "visual_mode.h"
 #include "video_types.h"
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -55,6 +56,9 @@ struct Config {
     struct Isf {
         std::string root="/opt/sideshow/isf",preset="examples/plasma.fs";
         int maxWidth=1280,maxHeight=720;
+        // [isf.scale]: per-shader render scale (0.25-1) by shader ID, overriding the shader's own
+        // SIDESHOW_RENDER_SCALE.
+        std::map<std::string,double> scale;
     } isf;
 
     struct Video {
