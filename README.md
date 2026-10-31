@@ -127,6 +127,21 @@ treat it as a starting point, not a guarantee — measure actual fps at bring-up
 `tools/osc_send.py ping`, and expect a curated `stage` playlist of the fastest, most reliable
 presets to follow once that's done.
 
+### Finding slow presets
+
+Each panel logs how every preset actually ran when it moves on to the next one (and every
+minute for a preset that stays up), for MilkDrop, Fluid, ISF and video alike:
+`perf: Foo.milk 27.3 fps, 12% late, slowest 180 ms over 30 s`. A frame is late when it took
+more than 1.5 frame times. To list the slowest presets a panel has shown:
+
+```bash
+journalctl -u sideshow-player -o cat | sed -n 's/.*perf: \(.*\) \([0-9.]*\) fps, \([0-9]*\)% late.*/\2 fps  \3% late  \1/p' | sort -n | head -30
+```
+
+Presets that stay well below 30 fps, or show many late frames, are the ones to leave out of a
+stage playlist (or, for ISF shaders, to give an `[isf.scale]` entry). The first showing of a
+MilkDrop preset includes its shader compile unless the cache was warmed (below).
+
 ### Warming the shader cache before a show
 
 The first time a panel shows a preset, compiling its shaders stalls the picture for a moment

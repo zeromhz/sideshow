@@ -46,6 +46,7 @@ add_library(sideshow_core STATIC
     src/preset_catalog.cpp
     src/display_mode.cpp
     src/boot_overlay.cpp
+    src/preset_performance.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
 target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
@@ -145,6 +146,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_preset_catalog.cpp
         tests/test_display_mode.cpp
         tests/test_boot_overlay.cpp
+        tests/test_preset_performance.cpp
     )
     target_compile_definitions(sideshow_tests PRIVATE ISF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/isf")
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)

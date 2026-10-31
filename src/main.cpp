@@ -26,6 +26,7 @@
 #include "output_level.h"
 #include "preset_catalog.h"
 #include "preset_manager.h"
+#include "preset_performance.h"
 #include "renderer.h"
 #include "boot_overlay.h"
 #include "boot_overlay_gl.h"
@@ -213,6 +214,7 @@ int main(int argc, char** argv) {
         Uint32 lastTicks = SDL_GetTicks();
         Uint32 fpsWindowStart = lastTicks;
         int framesInWindow = 0;
+        PresetPerformance performance(config.display.fps);
         bool running = true;
 
         while (running) {
@@ -275,11 +277,16 @@ int main(int argc, char** argv) {
                           flipMargin);
             }
             display.swap();
-            lastFlip = SDL_GetPerformanceCounter();
+            const Uint64 flipped = SDL_GetPerformanceCounter();
+            if (lastFlip != 0)
+                performance.frame(static_cast<double>(flipped - lastFlip) / static_cast<double>(counterRate));
+            lastFlip = flipped;
 
             ++framesInWindow;
             if (now - fpsWindowStart >= 1000) {
-                status.set(visuals.statusPreset(),
+                const std::string preset = visuals.statusPreset();
+                if (auto line = performance.update(preset)) logInfo(*line);
+                status.set(preset,
                            framesInWindow * 1000.0f / static_cast<float>(now - fpsWindowStart));
                 fpsWindowStart = now;
                 framesInWindow = 0;
