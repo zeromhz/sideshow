@@ -16,6 +16,7 @@ extern "C" {
 #include <stdexcept>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
 namespace sideshow {
 namespace {
 void checked(int result, const char* operation) {
@@ -48,6 +49,22 @@ int allocateVideoBuffer(AVCodecContext* codec, AVFrame* frame, int flags) {
     // This callback can run on decoder threads: no exceptions or shared state.
     if (!validSourceSize(frame->width, frame->height)) return AVERROR(EINVAL);
     return avcodec_default_get_buffer2(codec, frame, flags);
+}
+// Rotation from a stream's display matrix, in quarter turns (0, 90, 180, 270); -1 if absent.
+// FFmpeg 6.1 (libavcodec 60.31) moved stream side data to codecpar->coded_side_data.
+int streamRotation(const AVStream* s) {
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 31, 100)
+    auto side=av_packet_side_data_get(s->codecpar->coded_side_data,s->codecpar->nb_coded_side_data,AV_PKT_DATA_DISPLAYMATRIX);
+    const uint8_t* matrix=side ? side->data : nullptr;
+    const size_t matrixSize=side ? side->size : 0;
+#else
+    size_t matrixSize=0;
+    const uint8_t* matrix=av_stream_get_side_data(s,AV_PKT_DATA_DISPLAYMATRIX,&matrixSize);
+#endif
+    if(!matrix || matrixSize<9*sizeof(int32_t)) return -1;
+    const double angle=av_display_rotation_get(reinterpret_cast<const int32_t*>(matrix));
+    if(!std::isfinite(angle)) return -1;
+    return ((int(std::round(angle/90))*90)%360+360)%360;
 }
 bool hdr(AVColorTransferCharacteristic transfer) {
     return transfer == AVCOL_TRC_SMPTE2084 || transfer == AVCOL_TRC_ARIB_STD_B67;
@@ -110,6 +127,10 @@ struct VideoDecoder::Impl {
         format->interrupt_callback={interrupt,this}; format->io_open=denyOpen;
         format->probesize=5*1024*1024; format->max_analyze_duration=5*AV_TIME_BASE;
         checked(avformat_open_input(&format,nullptr,nullptr,nullptr),"Open video");
+        // Read rotation now: with probe decoders disabled (below), FFmpeg 6.1's
+        // avformat_find_stream_info writes the stream parameters back without their side data.
+        std::vector<int> rotations;
+        for(unsigned i=0;i<format->nb_streams;++i) rotations.push_back(streamRotation(format->streams[i]));
         // Probe headers/parsers only. Internal probe decoders cannot use our guarded
         // allocator, and could otherwise allocate oversized video (or audio) frames.
         format->codec_whitelist = av_strdup("");
@@ -139,18 +160,7 @@ struct VideoDecoder::Impl {
         checked(avcodec_open2(codec,decoder,nullptr),"Open codec");
         packet=av_packet_alloc(); frame=av_frame_alloc(); if(!packet || !frame) throw std::bad_alloc();
         auto rate=av_guess_frame_rate(format,s,nullptr); timestamps=VideoTimestamps(av_q2d(rate));
-#if LIBAVFORMAT_VERSION_MAJOR >= 61
-        auto side=av_packet_side_data_get(params->coded_side_data,params->nb_coded_side_data,AV_PKT_DATA_DISPLAYMATRIX);
-        const auto matrix=side ? side->data : nullptr;
-        const auto matrixSize=side ? side->size : 0;
-#else
-        size_t matrixSize=0;
-        const auto matrix=av_stream_get_side_data(s,AV_PKT_DATA_DISPLAYMATRIX,&matrixSize);
-#endif
-        if(matrix && matrixSize>=9*sizeof(int32_t)) {
-            double angle=av_display_rotation_get(reinterpret_cast<const int32_t*>(matrix));
-            if(std::isfinite(angle)) rotation=((int(std::round(angle/90))*90)%360+360)%360;
-        }
+        rotation=std::max(0,stream<int(rotations.size()) && rotations[stream]>=0 ? rotations[stream] : streamRotation(s));
     }
     VideoFrame convert() {
         check();
