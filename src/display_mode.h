@@ -30,9 +30,10 @@ struct RenderSize {
 // the aspect ratio is kept: 1920x1080 at 2/3 gives 1280x720. Never smaller than 1x1.
 RenderSize scaledRenderSize(int width, int height, double scale);
 
-// Vsync swap interval that shows each frame for whole refreshes without dropping below `fps`:
-// floor((refresh + 1) / fps), at least 1 (1 Hz tolerance for 59.94 Hz modes reported as 59). 60 Hz at 30 fps swaps every second vblank; 50 Hz at 30 fps
-// swaps every vblank and leaves the cap to the frame limiter. Unknown refresh gives 1.
-int swapIntervalFor(int refreshRate, int fps);
+// Refreshes to hold each frame for, so frames show for whole refreshes without dropping below
+// `fps`: floor((refresh + 1) / fps), at least 1 (1 Hz tolerance for 59.94 Hz modes reported as
+// 59). 60 Hz at 30 fps holds each frame for two refreshes; 50 Hz at 30 fps shows every refresh
+// and leaves the cap to the frame limiter. Unknown refresh gives 1.
+int refreshesPerFrame(int refreshRate, int fps);
 
 }  // namespace sideshow

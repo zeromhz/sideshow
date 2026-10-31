@@ -99,13 +99,13 @@ TEST_CASE("scaledRenderSize keeps the aspect ratio at the requested fraction") {
     CHECK(s.height == 720);
 }
 
-TEST_CASE("swapIntervalFor shows each frame for whole refreshes without undershooting") {
-    CHECK(swapIntervalFor(60, 30) == 2);
-    CHECK(swapIntervalFor(59, 30) == 2);  // 59.94 Hz reported as 59
-    CHECK(swapIntervalFor(50, 30) == 1);  // limiter caps 50 down to 30
-    CHECK(swapIntervalFor(120, 30) == 4);
-    CHECK(swapIntervalFor(60, 60) == 1);
-    CHECK(swapIntervalFor(30, 30) == 1);
-    CHECK(swapIntervalFor(24, 30) == 1);
-    CHECK(swapIntervalFor(0, 30) == 1);   // unknown refresh
+TEST_CASE("refreshesPerFrame shows each frame for whole refreshes without undershooting") {
+    CHECK(refreshesPerFrame(60, 30) == 2);
+    CHECK(refreshesPerFrame(59, 30) == 2);  // 59.94 Hz reported as 59
+    CHECK(refreshesPerFrame(50, 30) == 1);  // limiter caps 50 down to 30
+    CHECK(refreshesPerFrame(120, 30) == 4);
+    CHECK(refreshesPerFrame(60, 60) == 1);
+    CHECK(refreshesPerFrame(30, 30) == 1);
+    CHECK(refreshesPerFrame(24, 30) == 1);
+    CHECK(refreshesPerFrame(0, 30) == 1);   // unknown refresh
 }
