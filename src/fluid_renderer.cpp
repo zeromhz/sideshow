@@ -100,6 +100,13 @@ struct FluidRenderer::Impl {
     void begin(Program& p,const Target& source) {
         fluid_gl::resetState();vao.bind();p.use();p.two("texelSize",1.0f/source.width,1.0f/source.height);
     }
+    // Draws into dest only inside the UV box centre +- reach (clamped to the target).
+    void drawBox(const Target& dest,float x,float y,float reachX,float reachY) {
+        const int x0=std::clamp(int(std::floor((x-reachX)*dest.width)),0,dest.width),x1=std::clamp(int(std::ceil((x+reachX)*dest.width)),0,dest.width);
+        const int y0=std::clamp(int(std::floor((y-reachY)*dest.height)),0,dest.height),y1=std::clamp(int(std::ceil((y+reachY)*dest.height)),0,dest.height);
+        if(x1<=x0||y1<=y0)return;
+        glScissor(x0,y0,x1-x0,y1-y0);draw(dest);
+    }
     void draw(const Target& dest) {
         glBindFramebuffer(GL_FRAMEBUFFER,dest.fbo);glViewport(0,0,dest.width,dest.height);glDrawArrays(GL_TRIANGLES,0,3);
     }
@@ -113,16 +120,21 @@ struct FluidRenderer::Impl {
         const int substeps=dt>1.0f/60+1e-4f?2:1;
         const float step=dt/substeps;
         const float aspect=static_cast<float>(width)/height;
+        // Each splat adds a Gaussian onto velocity and dye in place, limited to the box where
+        // it exceeds 1e-5 of its peak (exp(-d^2/r) < 1e-5 beyond d^2 = 11.5 r), instead of
+        // rewriting both whole textures per splat.
         for(const auto& s:splats) {
+            const float radius=p.splatRadius/100*std::max(1.0f,aspect);
+            const float reachY=std::sqrt(11.5f*radius),reachX=reachY/aspect;
             begin(splat,f.velocity.read);splat.one("aspectRatio",aspect);splat.two("point",s.x,s.y);
-            splat.one("radius",p.splatRadius/100*std::max(1.0f,aspect));
-            splat.texture("uTarget",f.velocity.read.texture,0);
+            splat.one("radius",radius);
+            glEnable(GL_BLEND);glBlendFuncSeparate(GL_ONE,GL_ONE,GL_ZERO,GL_ONE);glEnable(GL_SCISSOR_TEST);
             splat.three("color",s.dx*(aspect<1?aspect:1),s.dy/(aspect>1?aspect:1),0);
-            draw(f.velocity.write);f.velocity.swap();
-            splat.texture("uTarget",f.dye.read.texture,0);
+            drawBox(f.velocity.read,s.x,s.y,reachX,reachY);
             // Reference autonomous splats multiply the 0.15 palette color by ten.
             splat.three("color",s.color.r*1.5f,s.color.g*1.5f,s.color.b*1.5f);
-            draw(f.dye.write);f.dye.swap();
+            drawBox(f.dye.read,s.x,s.y,reachX,reachY);
+            glDisable(GL_SCISSOR_TEST);glDisable(GL_BLEND);
         }
         for(int sub=0;sub<substeps;++sub) {
             begin(curl,f.velocity.read);curl.texture("uVelocity",f.velocity.read.texture,0);draw(f.curl);

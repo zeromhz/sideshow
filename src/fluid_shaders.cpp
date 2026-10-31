@@ -50,7 +50,6 @@ const char* splat=R"GLSL(out vec4 fragColor;
     
 
     in vec2 vUv;
-    uniform sampler2D uTarget;
     uniform float aspectRatio;
     uniform vec3 color;
     uniform vec2 point;
@@ -59,9 +58,8 @@ const char* splat=R"GLSL(out vec4 fragColor;
     void main () {
         vec2 p = vUv - point.xy;
         p.x *= aspectRatio;
-        vec3 splat = exp(-dot(p, p) / radius) * color;
-        vec3 base = texture(uTarget, vUv).xyz;
-        fragColor = vec4(base + splat, 1.0);
+        // Added onto the target with blending, inside a box around the point (see render()).
+        fragColor = vec4(exp(-dot(p, p) / radius) * color, 0.0);
     }
 )GLSL";
 const char* advection=R"GLSL(out vec4 fragColor;
