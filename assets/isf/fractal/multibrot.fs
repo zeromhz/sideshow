@@ -96,6 +96,10 @@ void main() {
     bool escaped = false;
     bool whole = abs(d - floor(d + 0.5)) < 0.001;
     if (whole) d = floor(d + 0.5);
+    // Periodicity check (Brent): points inside the set never escape and would otherwise run to
+    // the iteration limit. An orbit that comes back to a saved point is caught in a cycle; stop.
+    vec2 saved = vec2(1e9);
+    int check = 8;
     for (int i = 0; i < 256; i++) {
         if (i >= limit) break;
         // z^(d-1): repeated products for whole powers, polar form in between.
@@ -112,6 +116,9 @@ void main() {
         trap = min(trap, m);
         if (m > 1e4) { escaped = true; n = float(i); break; }
         if (dot(dz, dz) > 1e30) break;
+        vec2 drift = z - saved;
+        if (dot(drift, drift) < 1e-10) break;
+        if (i == check) { saved = z; check *= 2; }
     }
 
     vec3 col;
