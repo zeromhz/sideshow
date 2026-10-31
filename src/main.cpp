@@ -26,6 +26,7 @@
 #include "output_level.h"
 #include "preset_catalog.h"
 #include "preset_manager.h"
+#include "preset_performance.h"
 #include "renderer.h"
 #include "boot_overlay.h"
 #include "boot_overlay_gl.h"
@@ -197,22 +198,22 @@ int main(int argc, char** argv) {
             logInfo("frame pacing: each frame held for " + std::to_string(holdRefreshes) +
                     " refreshes at " + std::to_string(refresh) + " Hz");
         }
+        // One sleep, no spinning: Linux typically wakes within tens of microseconds, well inside
+        // the 1.5 ms vblank margin, and spinning the last 0.3 ms cost ~2% of a core.
         auto waitUntil = [counterRate](Uint64 deadline) {
             Uint64 counter = SDL_GetPerformanceCounter();
-            if (counter >= deadline) return counter;
-            // Sleep to within 0.3 ms of the deadline, then yield the rest.
-            const Uint64 slack = counterRate * 3 / 10000;
-            if (deadline - counter > slack) {
+            if (counter < deadline) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(
-                    (deadline - counter - slack) * 1000000000ull / counterRate));
+                    (deadline - counter) * 1000000000ull / counterRate));
+                counter = SDL_GetPerformanceCounter();
             }
-            while ((counter = SDL_GetPerformanceCounter()) < deadline) std::this_thread::yield();
             return counter;
         };
         Uint64 nextFrame = SDL_GetPerformanceCounter() + framePeriod;
         Uint32 lastTicks = SDL_GetTicks();
         Uint32 fpsWindowStart = lastTicks;
         int framesInWindow = 0;
+        PresetPerformance performance(config.display.fps);
         bool running = true;
 
         while (running) {
@@ -275,11 +276,16 @@ int main(int argc, char** argv) {
                           flipMargin);
             }
             display.swap();
-            lastFlip = SDL_GetPerformanceCounter();
+            const Uint64 flipped = SDL_GetPerformanceCounter();
+            if (lastFlip != 0)
+                performance.frame(static_cast<double>(flipped - lastFlip) / static_cast<double>(counterRate));
+            lastFlip = flipped;
 
             ++framesInWindow;
             if (now - fpsWindowStart >= 1000) {
-                status.set(visuals.statusPreset(),
+                const std::string preset = visuals.statusPreset();
+                if (auto line = performance.update(preset)) logInfo(*line);
+                status.set(preset,
                            framesInWindow * 1000.0f / static_cast<float>(now - fpsWindowStart));
                 fpsWindowStart = now;
                 framesInWindow = 0;

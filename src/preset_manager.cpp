@@ -31,16 +31,24 @@ PresetManager::~PresetManager() {
     projectm_playlist_destroy(playlist_);
 }
 
-void PresetManager::start(const std::string& name) {
-    if (switchPlaylist(name)) return;
+bool PresetManager::start(const std::string& name, const std::string& preferred) {
+    bool atPreferred = false;
+    if (switchPlaylist(name, preferred, atPreferred)) return atPreferred;
     if (name != "default") {
         logWarn("playlist '" + name + "' missing or empty, falling back to 'default'");
-        if (switchPlaylist("default")) return;
+        if (switchPlaylist("default", preferred, atPreferred)) return atPreferred;
     }
     logError("no usable playlist under the preset root; showing projectM's idle preset");
+    return false;
 }
 
 bool PresetManager::switchPlaylist(const std::string& name) {
+    bool unused = false;
+    return switchPlaylist(name, "", unused);
+}
+
+bool PresetManager::switchPlaylist(const std::string& name, const std::string& preferred, bool& startedAtPreferred) {
+    startedAtPreferred = false;
     const std::vector<std::string> files = catalog_.presetsIn(name);
     if (files.empty()) return false;
     switchRequested_.reset();
@@ -60,6 +68,16 @@ bool PresetManager::switchPlaylist(const std::string& name) {
     logInfo("playlist '" + name + "' (" + std::to_string(files.size()) + " presets)");
     lastLoadFailed_ = false;
     goingBack_ = false;
+    // Returning to MilkDrop resumes its preset: start the playlist there instead of loading a
+    // random preset first and then the remembered one (two shader compiles).
+    if (!preferred.empty()) {
+        for (uint32_t i = 0; i < files.size(); ++i) {
+            if (filenameOf(files[i]) != preferred || catalog_.isBad(files[i])) continue;
+            projectm_playlist_set_position(playlist_, i, false);
+            startedAtPreferred = true;
+            return true;
+        }
+    }
     if (projectm_playlist_get_shuffle(playlist_)) {
         projectm_playlist_play_next(playlist_, false);
     } else {

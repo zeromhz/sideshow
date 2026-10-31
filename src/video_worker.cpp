@@ -80,8 +80,11 @@ struct VideoWorker::Impl {
                 lock.unlock();current=std::move(candidate);candidate={};lock.lock();
                 activeGeneration=current.generation;committed=0;
             }
+            // The render thread notifies on every frame (playback()) and whenever it takes a
+            // frame (poll()), so these timed waits are only a fallback; a 5 ms timeout woke the
+            // worker about 200 times a second even while paused.
             if((requested || rewindGeneration) && retained->load()>=3) {
-                wake.wait_for(lock,std::chrono::milliseconds(5));continue;
+                wake.wait_for(lock,std::chrono::milliseconds(50));continue;
             }
             if(requested || rewindGeneration) {
                 auto request=requested;requested.reset();auto rewind=rewindGeneration;rewindGeneration=0;
@@ -124,7 +127,7 @@ struct VideoWorker::Impl {
                 } else {wake.wait(lock);continue;}
             }
             if(!current.source || current.done || paused || retained->load()>=3 || current.end>position+.25) {
-                wake.wait_for(lock,std::chrono::milliseconds(5));continue;
+                wake.wait_for(lock,std::chrono::milliseconds(50));continue;
             }
             const auto generation=current.generation;
             lock.unlock();

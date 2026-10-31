@@ -25,8 +25,11 @@ public:
     PresetManager& operator=(const PresetManager&) = delete;
 
     // Plays `name`; falls back to "default"; if both fail, projectM's idle preset stays up.
-    void start(const std::string& name);
+    // Starts `name` (falling back to "default"), at `preferred` (a preset file name) when the
+    // playlist contains it. Returns true if it started there.
+    bool start(const std::string& name, const std::string& preferred = "");
     bool switchPlaylist(const std::string& name);  // false (no change) if missing or empty
+    bool switchPlaylist(const std::string& name, const std::string& preferred, bool& startedAtPreferred);
     void next();
     void prev();
     void random();

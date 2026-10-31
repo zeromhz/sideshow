@@ -6,6 +6,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/display.h>
+#include <libavutil/log.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
@@ -173,7 +174,13 @@ struct VideoDecoder::Impl {
         // allocator, and could otherwise allocate oversized video (or audio) frames.
         format->codec_whitelist = av_strdup("");
         if (!format->codec_whitelist) throw std::bad_alloc();
-        start(); checked(avformat_find_stream_info(format,nullptr),"Probe video");
+        // With codecs disabled, FFmpeg logs "Codec ... not on whitelist" errors while probing.
+        // They are expected; silence FFmpeg for this call only.
+        start();
+        const int logLevel=av_log_get_level();av_log_set_level(AV_LOG_FATAL);
+        const int probed=avformat_find_stream_info(format,nullptr);
+        av_log_set_level(logLevel);
+        checked(probed,"Probe video");
         for(unsigned i=0;i<format->nb_streams;++i) {
             auto s=format->streams[i];
             if(s->codecpar->codec_type==AVMEDIA_TYPE_VIDEO && !(s->disposition & AV_DISPOSITION_ATTACHED_PIC)) {stream=int(i);break;}
