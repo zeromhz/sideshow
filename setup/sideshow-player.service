@@ -12,6 +12,9 @@ Group=sideshow
 SupplementaryGroups=video audio render input
 Environment=SDL_VIDEODRIVER=kmsdrm
 Environment=SDL_AUDIODRIVER=alsa
+# Compiled shaders persist in /var/lib/sideshow/.cache (about 100 KB per preset; the default
+# 1 GB limit is too small for the whole 8,000-preset pack).
+Environment=MESA_SHADER_CACHE_MAX_SIZE=2G
 ExecStart=/opt/sideshow/bin/sideshow-player --config /etc/sideshow/config.toml
 Restart=always
 RestartSec=2
