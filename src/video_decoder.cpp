@@ -162,7 +162,8 @@ struct VideoDecoder::Impl {
 #endif
         if(interlaced) throw std::runtime_error("Interlaced video is unsupported");
         if(hdr(frame->color_trc)) throw std::runtime_error("HDR video is unsupported");
-        VideoFrame result; result.width=size.first;result.height=size.second;result.stride=result.width*4;
+        VideoFrame result; result.width=size.first;result.height=size.second;
+        result.format=VideoPixels::Yuv420;result.stride=result.width;result.chromaStride=(result.width+1)/2;
         result.rotationDegrees=rotation;
         auto sar=av_guess_sample_aspect_ratio(format,format->streams[stream],frame);
         result.pixelAspect=sar.num>0 && sar.den>0 ? av_q2d(sar) : 1;
@@ -175,21 +176,35 @@ struct VideoDecoder::Impl {
 #endif
         auto times=timestamps.normalize(frame->best_effort_timestamp==AV_NOPTS_VALUE ? std::nullopt : std::optional<double>(frame->best_effort_timestamp*base), duration>0?std::optional<double>(duration*base):std::nullopt);
         result.pts=times.first;result.duration=times.second;
-        scaler=sws_getCachedContext(scaler,frame->width,frame->height,static_cast<AVPixelFormat>(frame->format),result.width,result.height,AV_PIX_FMT_RGBA,SWS_BILINEAR,nullptr,nullptr,nullptr);
-        if(!scaler) throw std::runtime_error("Video color converter allocation failed");
-        int matrix=frame->colorspace==AVCOL_SPC_BT709 ? SWS_CS_ITU709 :
+        // Frames go to the GPU as 8-bit planar YUV 4:2:0, converted to RGB in the shader. The
+        // common case (8-bit 4:2:0 already within the output box) is a plane copy; anything else
+        // (other formats, more bits, or footage to shrink) goes through swscale to YUV 4:2:0,
+        // keeping its colour matrix and range.
+        const auto source=static_cast<AVPixelFormat>(frame->format);
+        const AVPixFmtDescriptor* descriptor=av_pix_fmt_desc_get(source);
+        if(!descriptor) throw std::runtime_error("Unknown video pixel format");
+        const bool rgbSource=descriptor->flags & AV_PIX_FMT_FLAG_RGB;
+        const int matrix=frame->colorspace==AVCOL_SPC_BT709 ? SWS_CS_ITU709 :
             frame->colorspace==AVCOL_SPC_BT2020_NCL ? SWS_CS_BT2020 :
             frame->colorspace==AVCOL_SPC_UNSPECIFIED && frame->height>=720 ? SWS_CS_ITU709 : SWS_CS_ITU601;
+        result.matrix=matrix==SWS_CS_ITU709 ? VideoMatrix::Bt709 : matrix==SWS_CS_BT2020 ? VideoMatrix::Bt2020 : VideoMatrix::Bt601;
+        result.fullRange=!rgbSource && (frame->color_range==AVCOL_RANGE_JPEG || source==AV_PIX_FMT_YUVJ420P);
+        const int chromaHeight=(result.height+1)/2;
+        const size_t lumaBytes=size_t(result.stride)*result.height, chromaBytes=size_t(result.chromaStride)*chromaHeight;
+        result.pixels.resize(lumaBytes+2*chromaBytes);
+        uint8_t* planes[]={result.pixels.data(),result.pixels.data()+lumaBytes,result.pixels.data()+lumaBytes+chromaBytes,nullptr};
+        int strides[]={result.stride,result.chromaStride,result.chromaStride,0};
+        if((source==AV_PIX_FMT_YUV420P || source==AV_PIX_FMT_YUVJ420P) && frame->width==result.width && frame->height==result.height) {
+            av_image_copy_plane(planes[0],strides[0],frame->data[0],frame->linesize[0],result.width,result.height);
+            av_image_copy_plane(planes[1],strides[1],frame->data[1],frame->linesize[1],result.chromaStride,chromaHeight);
+            av_image_copy_plane(planes[2],strides[2],frame->data[2],frame->linesize[2],result.chromaStride,chromaHeight);
+            return result;
+        }
+        scaler=sws_getCachedContext(scaler,frame->width,frame->height,source,result.width,result.height,AV_PIX_FMT_YUV420P,SWS_BILINEAR,nullptr,nullptr,nullptr);
+        if(!scaler) throw std::runtime_error("Video color converter allocation failed");
         const auto coefficients=sws_getCoefficients(matrix);
-        checked(sws_setColorspaceDetails(scaler,coefficients,frame->color_range==AVCOL_RANGE_JPEG,coefficients,1,0,1<<16,1<<16),"Video colorspace");
-        result.rgba.resize(size_t(result.stride)*result.height);
-        uint8_t* output[]={result.rgba.data(),nullptr,nullptr,nullptr}; int strides[]={result.stride,0,0,0};
-        checked(sws_scale(scaler,frame->data,frame->linesize,0,frame->height,output,strides),"Convert video");
-        // swscale already writes opaque alpha for sources without an alpha channel; only sources
-        // that carry their own alpha need flattening.
-        const AVPixFmtDescriptor* descriptor=av_pix_fmt_desc_get(static_cast<AVPixelFormat>(frame->format));
-        if(!descriptor || (descriptor->flags & AV_PIX_FMT_FLAG_ALPHA))
-            for(size_t i=3;i<result.rgba.size();i+=4) result.rgba[i]=255;
+        checked(sws_setColorspaceDetails(scaler,coefficients,rgbSource ? 1 : int(result.fullRange),coefficients,result.fullRange,0,1<<16,1<<16),"Video colorspace");
+        checked(sws_scale(scaler,frame->data,frame->linesize,0,frame->height,planes,strides),"Convert video");
         return result;
     }
     std::optional<VideoFrame> next() {

@@ -86,7 +86,7 @@ TEST_CASE("Video worker shutdown cancels blocked decoding cooperatively") {
 }
 TEST_CASE("Video worker counts polled frames against the three frame budget") {
     struct Endless : VideoSource {
-        std::optional<VideoFrame> next() override { VideoFrame f; f.width=f.height=1;f.stride=4;f.rgba={1,2,3,255};return f; }
+        std::optional<VideoFrame> next() override { VideoFrame f; f.width=f.height=1;f.stride=4;f.pixels={1,2,3,255};return f; }
         void rewind() override {}
     };
     VideoWorker worker(videoFixture(""),[](const auto&,auto){return std::make_unique<Endless>();});
