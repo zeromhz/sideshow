@@ -44,3 +44,19 @@ TEST_CASE("Decoder refuses symlink components even when a catalog check raced") 
     VideoTree tree;tree.symlink("alias",videoFixture(""));
     CHECK_THROWS(VideoDecoder(tree.root/"alias/reordered.mp4",[]{return false;}));
 }
+TEST_CASE("HEVC decodes with or without the hardware option, falling back to software") {
+    const auto file = std::filesystem::path(VIDEO_FIXTURE_DIR).parent_path() / "video-hevc" / "hevc.mp4";
+    VideoDecoder software(file, [] { return false; }, VideoDecoderOptions{false});
+    VideoDecoder automatic(file, [] { return false; }, VideoDecoderOptions{true});
+    CHECK_FALSE(software.hardwareActive());
+    // Without a DRM hardware decoder (any non-Pi machine) the hardware option decodes in software.
+    for (int i = 0; i < 3; ++i) {
+        auto a = software.next(); auto b = automatic.next();
+        REQUIRE(a); REQUIRE(b);
+        CHECK(a->width == 64); CHECK(a->height == 48); CHECK(a->format == VideoPixels::Yuv420);
+        CHECK(b->pts == Catch::Approx(a->pts));
+        if (!automatic.hardwareActive()) CHECK(b->pixels == a->pixels);
+    }
+    CHECK_FALSE(software.next()); CHECK_FALSE(automatic.next());
+    automatic.rewind(); auto again = automatic.next(); REQUIRE(again); CHECK(again->pts == 0);
+}
