@@ -4,6 +4,7 @@
 #include "fluid_backend.h"
 #include "milkdrop_backend.h"
 #include "renderer.h"
+#include "boot_overlay_gl.h"
 #include "visual_controller.h"
 #include "brightness_pass.h"
 #include "fluid_motion.h"
@@ -220,6 +221,34 @@ int main() {
             require(milkdrop.internalSize().width==213&&milkdrop.internalSize().height==120,"Resize back lost the render scale");
             require(glGetError()==GL_NO_ERROR,"GL error after scaled MilkDrop resize");
             std::remove(path);
+        }
+        {
+            // Boot overlay: small white text on a darkened box in the bottom-right corner only.
+            sideshow::BootOverlay overlay;
+            auto frame=[&](float alpha){
+                glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(0,0,320,180);
+                glClearColor(0.2f,0.4f,0.6f,1.0f);glClear(GL_COLOR_BUFFER_BIT);
+                overlay.draw(alpha,320,180);
+                std::vector<unsigned char> px(320*180*4);glReadPixels(0,0,320,180,GL_RGBA,GL_UNSIGNED_BYTE,px.data());
+                require(glGetError()==GL_NO_ERROR,"GL error drawing boot overlay");
+                return px;};
+            overlay.setText("panel-01  192.168.1.23");
+            auto shown=frame(1.0f),hidden=frame(0.0f);
+            if(const char* dump=std::getenv("SIDESHOW_DUMP_OVERLAY")){FILE* f=std::fopen(dump,"wb");std::fprintf(f,"P6\n320 180\n255\n");for(int y=179;y>=0;--y)for(int x=0;x<320;++x)std::fwrite(&shown[(size_t(y)*320+x)*4],1,3,f);std::fclose(f);}
+            auto pixel=[](const std::vector<unsigned char>& px,int x,int y){return &px[(size_t(y)*320+x)*4];};
+            size_t white=0,dark=0,changedOutside=0;
+            for(int y=0;y<180;++y)for(int x=0;x<320;++x){
+                const unsigned char* p=pixel(shown,x,y);const unsigned char* q=pixel(hidden,x,y);
+                const bool changed=p[0]!=q[0]||p[1]!=q[1]||p[2]!=q[2];
+                // 180 lines -> scale 1: the box is 22*6-1+4 = 135 x 11 pixels, 4 pixels from the corner.
+                const bool inBox=x>=320-4-135&&x<320-4&&y>=4&&y<4+11;
+                if(!inBox&&changed)++changedOutside;
+                if(inBox&&p[0]>240&&p[1]>240&&p[2]>240)++white;
+                if(inBox&&p[2]<q[2]-40)++dark;
+            }
+            require(changedOutside==0,"Boot overlay drew outside the bottom-right box");
+            require(white>150&&dark>500,"Boot overlay text or backing box missing");
+            for(size_t i=0;i<hidden.size();i+=4)require(hidden[i]==51&&hidden[i+2]==153,"Boot overlay drew at zero alpha");
         }
     } catch(const std::exception& e) {std::cerr << e.what() << '\n';result=1;}
     SDL_GL_DeleteContext(context);SDL_DestroyWindow(window);SDL_Quit();return result;

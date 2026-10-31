@@ -28,6 +28,9 @@ planning context; the guides above describe the current implementation.
    Use a unique id per panel (`panel-01` … `panel-08`); it becomes the hostname
    (`ssh <user>@panel-01.local`) and the panel's OSC address.
 3. After reboot the panel goes black → visuals in about 20 s. No keyboard, mouse, or network needed.
+   For the first minute the panel ID and IP address appear in small type in the bottom-right
+   corner (`panel-01  192.168.1.23`, or `no network`), so you can find each panel on the network.
+   Set `[display] ip_overlay_seconds = 0` to turn this off.
 
 To update: `cd ~/sideshow && git pull && sudo setup/install.sh && sudo systemctl restart sideshow-player` (keeps your `/etc/sideshow/config.toml`).
 

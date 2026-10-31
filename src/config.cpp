@@ -78,6 +78,8 @@ ConfigResult parseConfig(std::string_view tomlText) {
     // 30 fps is the ceiling: older configs with fps = 60 warn and fall back to 30.
     readKey(root, "display", "fps", c.display.fps, [](int v) { return v >= 1 && v <= 30; }, w);
     readKey(root, "display", "fullscreen", c.display.fullscreen, any, w);
+    readKey(root, "display", "ip_overlay_seconds", c.display.ipOverlaySeconds,
+            [](int v) { return v >= 0 && v <= 600; }, w);
 
     readKey(root, "audio", "device", c.audio.device, any, w);
     readKey(root, "audio", "sample_rate", c.audio.sampleRate,

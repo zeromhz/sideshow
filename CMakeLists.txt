@@ -45,6 +45,7 @@ add_library(sideshow_core STATIC
     src/config.cpp
     src/preset_catalog.cpp
     src/display_mode.cpp
+    src/boot_overlay.cpp
 )
 target_include_directories(sideshow_core PUBLIC src)
 target_include_directories(sideshow_core SYSTEM PRIVATE ${vvisf_SOURCE_DIR}/VVISF/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
@@ -85,7 +86,7 @@ if(SIDESHOW_BUILD_PLAYER)
     target_compile_options(sideshow_fluid PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_fluid PUBLIC sideshow_core ${SIDESHOW_GL_LIBS})
     add_library(sideshow_backends STATIC src/video_presenter.cpp src/video_backend.cpp src/fluid_backend.cpp src/milkdrop_backend.cpp
-        src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp)
+        src/renderer.cpp src/preset_manager.cpp src/brightness_pass.cpp src/boot_overlay_gl.cpp)
     target_compile_options(sideshow_backends PRIVATE -Wall -Wextra)
     target_link_libraries(sideshow_backends PUBLIC sideshow_fluid sideshow_video libprojectM::projectM libprojectM::playlist)
     if(SIDESHOW_BUILD_GL_TESTS)
@@ -143,6 +144,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_config.cpp
         tests/test_preset_catalog.cpp
         tests/test_display_mode.cpp
+        tests/test_boot_overlay.cpp
     )
     target_compile_definitions(sideshow_tests PRIVATE ISF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/isf")
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
