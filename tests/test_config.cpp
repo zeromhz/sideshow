@@ -21,7 +21,7 @@ TEST_CASE("Config: empty text gives all defaults and no warnings") {
     CHECK(r.config.display.height == 0);
     CHECK(r.config.display.maxWidth == 2560);
     CHECK(r.config.display.maxHeight == 1440);
-    CHECK(r.config.display.fps == 60);
+    CHECK(r.config.display.fps == 30);
     CHECK(r.config.display.fullscreen);
     CHECK(r.config.audio.device.empty());
     CHECK(r.config.audio.sampleRate == 48000);
@@ -34,6 +34,7 @@ TEST_CASE("Config: empty text gives all defaults and no warnings") {
     CHECK_FALSE(r.config.presets.hardcutEnabled);
     CHECK(r.config.presets.beatSensitivity == 1.0f);
     CHECK(r.config.presets.shuffle);
+    CHECK(r.config.presets.renderScale == 2.0 / 3.0);
     CHECK(r.config.output.masterDefault == 1.0f);
     CHECK(r.config.output.masterCurve == 2.0f);
     CHECK(r.config.output.masterSmoothingMs == 50.0f);
@@ -93,11 +94,11 @@ panel_id = 5
 [osc]
 port = "nine thousand"
 [display]
-fps = 30
+fps = 24
 )");
     CHECK(r.config.panelId == "panel-01");
     CHECK(r.config.osc.port == 9000);
-    CHECK(r.config.display.fps == 30);
+    CHECK(r.config.display.fps == 24);
     CHECK(hasWarningContaining(r, "panel_id"));
     CHECK(hasWarningContaining(r, "osc.port"));
 }
@@ -124,6 +125,22 @@ master_default = 1.5
     CHECK(hasWarningContaining(r, "osc.port"));
     CHECK(hasWarningContaining(r, "output.master_default"));
     CHECK(hasWarningContaining(r, "presets.beat_sensitivity"));
+}
+
+TEST_CASE("Config: frame rate is capped at 30 and render scale is bounded") {
+    ConfigResult r = parseConfig(R"(
+[display]
+fps = 60
+[presets]
+render_scale = 0.1
+)");
+    CHECK(r.config.display.fps == 30);
+    CHECK(r.config.presets.renderScale == 2.0 / 3.0);
+    CHECK(hasWarningContaining(r, "display.fps"));
+    CHECK(hasWarningContaining(r, "presets.render_scale"));
+    r = parseConfig("[presets]\nrender_scale = 1.0\n");
+    CHECK(r.warnings.empty());
+    CHECK(r.config.presets.renderScale == 1.0);
 }
 
 TEST_CASE("Config: unparseable TOML gives defaults and a warning") {

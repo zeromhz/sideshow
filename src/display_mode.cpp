@@ -1,5 +1,6 @@
 #include "display_mode.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace sideshow {
@@ -64,6 +65,18 @@ std::optional<size_t> pickAutoMode(const std::vector<DisplayMode>& modes, const 
     }
     if (!bestSize) return std::nullopt;
     return findExactMode(modes, modes[*bestSize].width, modes[*bestSize].height);
+}
+
+RenderSize scaledRenderSize(int width, int height, double scale) {
+    if (!(scale > 0.0) || scale > 1.0) scale = 1.0;
+    return {std::max(1, static_cast<int>(std::lround(width * scale))),
+            std::max(1, static_cast<int>(std::lround(height * scale)))};
+}
+
+int swapIntervalFor(int refreshRate, int fps) {
+    if (refreshRate <= 0 || fps <= 0) return 1;
+    // +1 Hz tolerance: 59.94 Hz modes can report 59 and should still swap every second vblank.
+    return std::max(1, (refreshRate + 1) / fps);
 }
 
 }  // namespace sideshow

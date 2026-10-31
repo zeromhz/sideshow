@@ -101,7 +101,20 @@ Display::Display(const Config::Display& config) {
         SDL_DestroyWindow(window_);
         throw std::runtime_error("SDL_GL_CreateContext failed: " + error);
     }
-    if (SDL_GL_SetSwapInterval(1) != 0) {
+    // Show each frame for whole refreshes at the frame-rate ceiling (60 Hz at 30 fps swaps every
+    // second vblank). If the driver refuses, fall back to every vblank; the main loop's frame
+    // limiter still holds the ceiling.
+    int refresh = mode.refresh_rate;
+    if (!config.fullscreen) {
+        SDL_DisplayMode current{};
+        const int index = SDL_GetWindowDisplayIndex(window_);
+        refresh = index >= 0 && SDL_GetCurrentDisplayMode(index, &current) == 0 ? current.refresh_rate : 0;
+    }
+    const int interval = swapIntervalFor(refresh, config.fps);
+    if (interval > 1 && SDL_GL_SetSwapInterval(interval) == 0) {
+        logInfo("vsync every " + std::to_string(interval) + " refreshes (" + std::to_string(refresh) +
+                " Hz) for a " + std::to_string(config.fps) + " fps ceiling");
+    } else if (SDL_GL_SetSwapInterval(1) != 0) {
         logWarn(std::string("vsync unavailable: ") + SDL_GetError());
     }
     SDL_ShowCursor(SDL_DISABLE);

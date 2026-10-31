@@ -75,7 +75,8 @@ ConfigResult parseConfig(std::string_view tomlText) {
             [](int v) { return v >= 320 && v <= 7680; }, w);
     readKey(root, "display", "max_height", c.display.maxHeight,
             [](int v) { return v >= 240 && v <= 4320; }, w);
-    readKey(root, "display", "fps", c.display.fps, [](int v) { return v >= 1 && v <= 240; }, w);
+    // 30 fps is the ceiling: older configs with fps = 60 warn and fall back to 30.
+    readKey(root, "display", "fps", c.display.fps, [](int v) { return v >= 1 && v <= 30; }, w);
     readKey(root, "display", "fullscreen", c.display.fullscreen, any, w);
 
     readKey(root, "audio", "device", c.audio.device, any, w);
@@ -96,6 +97,8 @@ ConfigResult parseConfig(std::string_view tomlText) {
     readKey(root, "presets", "beat_sensitivity", c.presets.beatSensitivity,
             [](float v) { return v >= 0.0f && v <= 2.0f; }, w);  // projectM clamps to 0..2
     readKey(root, "presets", "shuffle", c.presets.shuffle, any, w);
+    readKey(root, "presets", "render_scale", c.presets.renderScale,
+            [](double v) { return v >= 0.25 && v <= 1.0; }, w);
     if (auto locked = root["presets"]["locked"]; locked && !locked.is_boolean())
         w.push_back("presets.locked: expected boolean, using default");
     else

@@ -21,4 +21,18 @@ std::optional<size_t> findExactMode(const std::vector<DisplayMode>& modes, int w
 std::optional<size_t> pickAutoMode(const std::vector<DisplayMode>& modes, const DisplayMode& native,
                                    int maxWidth, int maxHeight);
 
+struct RenderSize {
+    int width;
+    int height;
+};
+
+// Internal render size for a drawable scaled by `scale` (0 < scale <= 1) in both directions, so
+// the aspect ratio is kept: 1920x1080 at 2/3 gives 1280x720. Never smaller than 1x1.
+RenderSize scaledRenderSize(int width, int height, double scale);
+
+// Vsync swap interval that shows each frame for whole refreshes without dropping below `fps`:
+// floor((refresh + 1) / fps), at least 1 (1 Hz tolerance for 59.94 Hz modes reported as 59). 60 Hz at 30 fps swaps every second vblank; 50 Hz at 30 fps
+// swaps every vblank and leaves the cap to the frame limiter. Unknown refresh gives 1.
+int swapIntervalFor(int refreshRate, int fps);
+
 }  // namespace sideshow
