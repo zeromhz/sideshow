@@ -76,6 +76,15 @@ systemctl daemon-reload
 systemctl enable sideshow-player.service
 systemctl disable getty@tty1.service || true   # no login prompt flashing on the panel
 
+echo "==> Tuning for stage use"
+# Wi-Fi power saving delays incoming OSC packets by up to a few hundred milliseconds.
+if [[ -d /etc/NetworkManager/conf.d ]]; then
+    printf '[connection]\nwifi.powersave = 2\n' > /etc/NetworkManager/conf.d/sideshow-wifi-powersave.conf
+fi
+# Background package-list downloads and man-page indexing cause random CPU and SD-card bursts.
+# (Raspberry Pi OS Lite does not install updates automatically; update by hand between shows.)
+systemctl disable --now apt-daily.timer apt-daily-upgrade.timer man-db.timer 2>/dev/null || true
+
 echo "==> Quieting boot"
 sed -i 's/console=tty1/console=tty3/' "$CMDLINE"
 for option in quiet logo.nologo vt.global_cursor_default=0 consoleblank=0; do

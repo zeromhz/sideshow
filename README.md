@@ -52,6 +52,9 @@ Notes:
   (`MilkDrop render …`). Set `[presets] render_scale` (0.25–1) to change it.
 - Frame rate is capped at 30 fps (`[display] fps`, 1–30). On a 60 Hz screen each frame is held
   for exactly two refreshes.
+- Setup tunes the Pi for stage use: the player runs the CPU at full clock (performance
+  governor), Wi-Fi power saving is off (it delays OSC), and the background `apt-daily` and
+  `man-db` timers are disabled. Update packages by hand between shows.
 - If no screen is detected at boot, the player exits and systemd retries every 2 s, so visuals
   appear shortly after the screen is powered on.
 - The tty1 login prompt is disabled; use SSH.

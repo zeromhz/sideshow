@@ -1,6 +1,6 @@
 [Unit]
 Description=Sideshow audio-reactive visuals player
-After=sound.target
+After=sound.target raspi-config.service
 Wants=sound.target
 # Keep restarting forever; never give up mid-show.
 StartLimitIntervalSec=0
@@ -15,6 +15,9 @@ Environment=SDL_AUDIODRIVER=alsa
 # Compiled shaders persist in /var/lib/sideshow/.cache (about 100 KB per preset; the default
 # 1 GB limit is too small for the whole 8,000-preset pack).
 Environment=MESA_SHADER_CACHE_MAX_SIZE=2G
+# Run the CPU at full clock (the "+" runs this step as root). Raspberry Pi OS switches to the
+# ondemand governor during boot, which lets preset switches start at a low clock.
+ExecStartPre=+/bin/sh -c 'for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor; do echo performance > "$g" 2>/dev/null || true; done'
 ExecStart=/opt/sideshow/bin/sideshow-player --config /etc/sideshow/config.toml
 Restart=always
 RestartSec=2
