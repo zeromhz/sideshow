@@ -57,7 +57,22 @@ Notes:
   `man-db` timers are disabled. Update packages by hand between shows.
 - If no screen is detected at boot, the player exits and systemd retries every 2 s, so visuals
   appear shortly after the screen is powered on.
-- The tty1 login prompt is disabled; use SSH.
+- The panel's screen shows no login prompt and console switching (Ctrl+Alt+F2) does not work
+  while the visuals run; use SSH, or the keyboard shortcut below.
+
+### Logging in with a keyboard (e.g. to change Wi-Fi)
+
+Plug a USB keyboard into any USB port and press **Ctrl+Alt+Q**. The visuals stop and stay
+stopped, and the screen shows a login prompt. To join a different Wi-Fi network:
+
+```bash
+sudo nmtui            # Activate a connection → pick the network → enter its password
+```
+
+or `sudo nmcli dev wifi connect "Network Name" password "the-password"`. The Pi remembers
+every network it has joined and reconnects to whichever is available. Restart the visuals with
+`sudo systemctl start sideshow-player` (or reboot). The shortcut needs a player installed from
+this version on; older installs have to be reached over SSH once to update.
 
 ## OSC control
 

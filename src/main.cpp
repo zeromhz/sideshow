@@ -27,6 +27,7 @@
 #include "preset_catalog.h"
 #include "preset_manager.h"
 #include "preset_performance.h"
+#include "keyboard_stop.h"
 #include "renderer.h"
 #include "boot_overlay.h"
 #include "boot_overlay_gl.h"
@@ -220,7 +221,14 @@ int main(int argc, char** argv) {
             if (g_signalled.load()) running = false;
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_QUIT) {
+                if (event.type == SDL_KEYDOWN &&
+                    isKeyboardStop(event.key.keysym.sym, (event.key.keysym.mod & KMOD_CTRL) != 0,
+                                   (event.key.keysym.mod & KMOD_ALT) != 0, event.key.repeat != 0)) {
+                    logInfo("keyboard: Ctrl+Alt+Q, stopping visuals; the panel shows a login prompt "
+                            "(restart with: sudo systemctl start sideshow-player)");
+                    exitCode = kKeyboardStopExitCode;
+                    running = false;
+                } else if (event.type == SDL_QUIT) {
                     running = false;
                 } else if (event.type == SDL_AUDIODEVICEREMOVED && event.adevice.iscapture) {
                     if (audio) audio->handleDeviceRemoved(event.adevice.which);

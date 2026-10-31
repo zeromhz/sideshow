@@ -147,6 +147,7 @@ if(SIDESHOW_BUILD_TESTS)
         tests/test_display_mode.cpp
         tests/test_boot_overlay.cpp
         tests/test_preset_performance.cpp
+        tests/test_keyboard_stop.cpp
     )
     target_compile_definitions(sideshow_tests PRIVATE ISF_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/isf")
     target_link_libraries(sideshow_tests PRIVATE sideshow_core Catch2::Catch2WithMain)
