@@ -12,9 +12,19 @@ bool lit(const TextBitmap& b, int x, int y) { return b.pixels[static_cast<size_t
 }  // namespace
 
 TEST_CASE("Boot overlay text names the panel and its addresses") {
-    CHECK(bootOverlayText("panel-01", {"192.168.1.23"}) == "panel-01  192.168.1.23");
-    CHECK(bootOverlayText("panel-02", {"10.0.0.5", "192.168.1.9"}) == "panel-02  10.0.0.5  192.168.1.9");
-    CHECK(bootOverlayText("dev", {}) == "dev  no network");
+    CHECK(bootOverlayText({"panel-01", {"172.20.10.3"}, "pi", std::string("Josh's iPhone")}) ==
+          "panel-01  ssh pi@172.20.10.3  wifi: Josh's iPhone");
+    CHECK(bootOverlayText({"panel-02", {"10.0.0.5", "169.254.4.2"}, "pi", std::string("")}) ==
+          "panel-02  ssh pi@10.0.0.5  also 169.254.4.2  wifi: none");
+    CHECK(bootOverlayText({"dev", {}, "pi", std::nullopt}) == "dev  no network");
+    CHECK(bootOverlayText({"dev", {"10.0.0.5"}, "", std::nullopt}) == "dev  ssh 10.0.0.5");
+}
+
+TEST_CASE("Active Wi-Fi name is read from nmcli's terse output") {
+    CHECK(parseActiveWifi("no:Neighbour\nyes:Josh's iPhone\nno:Other\n") == "Josh's iPhone");
+    CHECK(parseActiveWifi("yes:Stage\\:5GHz\n") == "Stage:5GHz");  // nmcli escapes ':'
+    CHECK(parseActiveWifi("no:Neighbour\n").empty());
+    CHECK(parseActiveWifi("").empty());
 }
 
 TEST_CASE("Text rasterizes to 5x7 glyphs with spacing and padding") {
@@ -37,13 +47,16 @@ TEST_CASE("Text rasterizes to 5x7 glyphs with spacing and padding") {
 
 TEST_CASE("Every supported character has a glyph distinct from the fallback") {
     const TextBitmap fallback = rasterizeText("?", 0);
-    for (char c : std::string("0123456789abcdefghijklmnopqrstuvwxyz.:-/")) {
+    for (char c : std::string("0123456789abcdefghijklmnopqrstuvwxyz.:-/@_'()")) {
         const TextBitmap b = rasterizeText(std::string(1, c), 0);
         CHECK(b.pixels != fallback.pixels);
         CHECK(b.pixels != rasterizeText(" ", 0).pixels);
     }
     CHECK(rasterizeText("A", 0).pixels == rasterizeText("a", 0).pixels);
     CHECK(rasterizeText("~", 0).pixels == fallback.pixels);
+    // UTF-8: curly apostrophes draw as ', other characters as one '?'.
+    CHECK(rasterizeText("Josh\u2019s", 0).pixels == rasterizeText("Josh's", 0).pixels);
+    CHECK(rasterizeText("caf\u00e9", 0).pixels == rasterizeText("caf?", 0).pixels);
     CHECK(rasterizeText("", 1).width == 2);
 }
 

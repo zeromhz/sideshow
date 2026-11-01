@@ -9,8 +9,9 @@ namespace sideshow {
 // Pure helpers for the boot address overlay (no GL): text, layout and timing.
 
 // One-channel bitmap of text in a 5x7 pixel font, one pixel of spacing between characters
-// and a `padding`-pixel empty border. Row 0 is the top. 255 = lit, 0 = empty. Lowercase
-// letters, digits, space, '.', ':', '-' and '/' are drawn; anything else is drawn as '?'.
+// and a `padding`-pixel empty border. Row 0 is the top. 255 = lit, 0 = empty. Letters (upper
+// case drawn as lower case), digits, space and . : - / @ _ ' ( ) are drawn; anything else is
+// drawn as '?'.
 struct TextBitmap {
     int width = 0;
     int height = 0;
@@ -21,9 +22,26 @@ TextBitmap rasterizeText(const std::string& text, int padding = 2);
 // Non-loopback IPv4 addresses of interfaces that are up, sorted, e.g. {"192.168.1.23"}.
 std::vector<std::string> localIpv4Addresses();
 
-// "panel-01  192.168.1.23" (several addresses separated by two spaces), or
-// "panel-01  no network" when there are none.
-std::string bootOverlayText(const std::string& panelId, const std::vector<std::string>& addresses);
+struct BootOverlayInfo {
+    std::string panelId;
+    std::vector<std::string> addresses;  // IPv4, first one is used for the ssh hint
+    std::string loginUser;               // "" if unknown
+    // Wi-Fi network name; "" = not connected; nullopt = unknown (not shown).
+    std::optional<std::string> wifi;
+};
+// "panel-01  ssh pi@172.20.10.3  wifi: Josh's iPhone"; further addresses follow as
+// "also 169.254.4.2"; "panel-01  no network  wifi: none" without an address.
+std::string bootOverlayText(const BootOverlayInfo& info);
+
+// Name of the first regular account (UID 1000, the one Raspberry Pi Imager creates), or "".
+std::string loginUserName();
+
+// SSID of the active Wi-Fi network from `nmcli -t -f ACTIVE,SSID dev wifi list` output
+// ("yes:Name" lines, ':' escaped as "\:"); "" when none is active.
+std::string parseActiveWifi(const std::string& nmcliOutput);
+
+// Runs nmcli (at most ~3 s; call off the render thread). nullopt if nmcli is unavailable.
+std::optional<std::string> currentWifiName();
 
 // Overlay opacity `elapsed` seconds after the player started: 1 while showing, fading to 0
 // over the last second, 0 afterwards. Shows only when the system had booted recently

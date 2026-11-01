@@ -7,6 +7,8 @@
 #include <csignal>
 #include <cstring>
 #include <exception>
+#include <condition_variable>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -58,6 +60,47 @@ std::string configPathFromArgs(int argc, char** argv) {
     }
     return kDefaultConfigPath;
 }
+
+// Looks up the Wi-Fi network name for the boot overlay every few seconds on its own thread
+// (nmcli can take a moment, and the render thread must never wait for it), for `seconds`.
+class WifiNameWatcher {
+public:
+    explicit WifiNameWatcher(double seconds) {
+        if (seconds <= 0) return;
+        thread_ = std::thread([this, seconds] {
+            const auto end = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+            std::unique_lock<std::mutex> lock(mutex_);
+            while (!stop_ && std::chrono::steady_clock::now() < end) {
+                lock.unlock();
+                auto name = currentWifiName();
+                lock.lock();
+                name_ = std::move(name);
+                wake_.wait_for(lock, std::chrono::seconds(5), [this] { return stop_; });
+            }
+        });
+    }
+    ~WifiNameWatcher() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            stop_ = true;
+        }
+        wake_.notify_all();
+        if (thread_.joinable()) thread_.join();
+    }
+    WifiNameWatcher(const WifiNameWatcher&) = delete;
+    WifiNameWatcher& operator=(const WifiNameWatcher&) = delete;
+    std::optional<std::string> name() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return name_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable wake_;
+    bool stop_ = false;
+    std::optional<std::string> name_;
+    std::thread thread_;
+};
 
 // --warm-cache [playlist]: nullopt when absent; the playlist defaults to the configured one.
 std::optional<std::string> warmPlaylistFromArgs(int argc, char** argv, const std::string& fallback) {
@@ -170,7 +213,10 @@ int main(int argc, char** argv) {
         const auto uptimeAtStart = systemUptimeSeconds();
         const Uint64 startCounter = SDL_GetPerformanceCounter();
         double lastAddressCheck = -1.0;
-        logInfo(bootOverlayText(config.panelId, localIpv4Addresses()));
+        const std::string loginUser = loginUserName();
+        logInfo(bootOverlayText({config.panelId, localIpv4Addresses(), loginUser, std::nullopt}));
+        WifiNameWatcher wifiName(bootOverlayAlpha(0, config.display.ipOverlaySeconds, uptimeAtStart) > 0
+                                     ? config.display.ipOverlaySeconds : 0);
 
         OutputLevel output(config.output.masterDefault, config.output.masterCurve,
                            config.output.masterSmoothingMs);
@@ -273,7 +319,8 @@ int main(int argc, char** argv) {
             if (overlayAlpha > 0.0f) {
                 // Re-check every second: Wi-Fi often joins after the player has started.
                 if (lastAddressCheck < 0.0 || elapsed - lastAddressCheck >= 1.0) {
-                    bootOverlay.setText(bootOverlayText(config.panelId, localIpv4Addresses()));
+                    bootOverlay.setText(bootOverlayText(
+                        {config.panelId, localIpv4Addresses(), loginUser, wifiName.name()}));
                     lastAddressCheck = elapsed;
                 }
                 bootOverlay.draw(overlayAlpha, display.drawableWidth(), display.drawableHeight());

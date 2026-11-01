@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Provision a Raspberry Pi 5 (Raspberry Pi OS Lite, Bookworm 64-bit) as a sideshow panel.
-# Safe to re-run. Usage: sudo setup/install.sh [--panel-id panel-03]
+# Safe to re-run. Usage: sudo setup/install.sh [--panel-id panel-03] [--wifi "Name" "password"]...
+#   --wifi saves a Wi-Fi network (repeatable; "" as the password for an open network). The Pi
+#   joins whichever saved network it finds, so save the stage network, a phone hotspot, etc.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,10 +11,15 @@ CONFIG=/etc/sideshow/config.toml
 CMDLINE=/boot/firmware/cmdline.txt
 BOOTCONFIG=/boot/firmware/config.txt
 PANEL_ID=""
+WIFI_NAMES=()
+WIFI_PASSWORDS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --panel-id) PANEL_ID="${2:?--panel-id needs a value}"; shift 2 ;;
+        --wifi)
+            if [[ $# -lt 3 ]]; then echo "--wifi needs a network name and a password (\"\" if open)" >&2; exit 2; fi
+            WIFI_NAMES+=("$2"); WIFI_PASSWORDS+=("$3"); shift 3 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -25,11 +32,18 @@ if [[ -n "$PANEL_ID" && ! "$PANEL_ID" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; then
     echo "panel id must be lowercase letters, digits, and dashes (e.g. panel-03)" >&2
     exit 2
 fi
+for i in "${!WIFI_NAMES[@]}"; do
+    name="${WIFI_NAMES[$i]}"; password="${WIFI_PASSWORDS[$i]}"
+    if [[ -z "$name" || ${#name} -gt 32 ]]; then echo "Wi-Fi name must be 1-32 characters: '$name'" >&2; exit 2; fi
+    if [[ -n "$password" && ( ${#password} -lt 8 || ${#password} -gt 63 ) ]]; then
+        echo "Wi-Fi password for '$name' must be 8-63 characters (or \"\" for an open network)" >&2; exit 2
+    fi
+done
 
 echo "==> Installing packages"
 apt-get update
 apt-get install -y build-essential cmake git pkg-config \
-    libsdl2-dev liblo-dev libgles-dev libegl-dev \
+    libsdl2-dev liblo-dev libgles-dev libegl-dev avahi-daemon \
     libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
 
 echo "==> Building libprojectM"
@@ -84,6 +98,51 @@ fi
 # Background package-list downloads and man-page indexing cause random CPU and SD-card bursts.
 # (Raspberry Pi OS Lite does not install updates automatically; update by hand between shows.)
 systemctl disable --now apt-daily.timer apt-daily-upgrade.timer man-db.timer 2>/dev/null || true
+
+echo "==> Network access"
+# Changes saved profiles only; the network you are connected over stays up.
+if command -v nmcli >/dev/null && systemctl is-active --quiet NetworkManager; then
+    # Saved Wi-Fi networks (--wifi). Existing ones are updated in place, not re-created.
+    for i in "${!WIFI_NAMES[@]}"; do
+        name="${WIFI_NAMES[$i]}"; password="${WIFI_PASSWORDS[$i]}"; profile="sideshow-wifi-$name"
+        if ! nmcli -t -e no -f NAME connection show | grep -Fxq -- "$profile"; then
+            nmcli connection add type wifi con-name "$profile" ifname wlan0 ssid "$name" >/dev/null ||
+                { echo "    could not save Wi-Fi network '$name'" >&2; continue; }
+        fi
+        if [[ -n "$password" ]]; then
+            nmcli connection modify "$profile" wifi.ssid "$name" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$password"
+        else
+            nmcli connection modify "$profile" wifi.ssid "$name" remove wifi-sec 2>/dev/null || true
+        fi
+        nmcli connection modify "$profile" connection.autoconnect yes
+        echo "    saved Wi-Fi network: $name"
+    done
+    # Keep retrying every saved Wi-Fi network forever. NetworkManager's default gives up after
+    # four attempts for about five minutes, so a panel booted before its hotspot or stage
+    # network was up could sit offline.
+    # (Name last and unescaped, so names containing ':' stay whole.)
+    while IFS=: read -r type profile; do
+        [[ "$type" == "802-11-wireless" ]] || continue
+        nmcli connection modify "$profile" connection.autoconnect-retries 0 || true
+    done < <(nmcli -t -e no -f TYPE,NAME connection show)
+    # Ethernet: a router's DHCP first; without one (a cable straight to a laptop), fall back to a
+    # self-assigned 169.254.x.x address after 20 s, so ssh <user>@<panel-id>.local still works.
+    if nmcli -t -f DEVICE device | grep -Fxq eth0; then
+        if ! nmcli -t -e no -f NAME connection show | grep -Fxq sideshow-wired; then
+            nmcli connection add type ethernet con-name sideshow-wired ifname eth0 >/dev/null || true
+        fi
+        nmcli connection modify sideshow-wired ipv4.method auto ipv4.dhcp-timeout 20 \
+            connection.autoconnect-priority 10 connection.autoconnect-retries 1 || true
+        if ! nmcli -t -e no -f NAME connection show | grep -Fxq sideshow-wired-direct; then
+            nmcli connection add type ethernet con-name sideshow-wired-direct ifname eth0 >/dev/null || true
+        fi
+        nmcli connection modify sideshow-wired-direct ipv4.method link-local ipv6.method link-local \
+            connection.autoconnect-priority 0 || true
+    fi
+else
+    echo "    NetworkManager is not running; skipping Wi-Fi and Ethernet setup"
+fi
+systemctl enable --now avahi-daemon 2>/dev/null || true   # <panel-id>.local names
 
 echo "==> Quieting boot"
 sed -i 's/console=tty1/console=tty3/' "$CMDLINE"

@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <fstream>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <pwd.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #endif
@@ -67,6 +69,11 @@ const Glyph* glyphFor(char c) {
     static const Glyph colon = {"     ", " ##  ", " ##  ", "     ", " ##  ", " ##  ", "     "};
     static const Glyph dash = {"     ", "     ", "     ", "#####", "     ", "     ", "     "};
     static const Glyph slash = {"     ", "    #", "   # ", "  #  ", " #   ", "#    ", "     "};
+    static const Glyph at = {" ### ", "#   #", "# ###", "# # #", "# ###", "#    ", " ####"};
+    static const Glyph underscore = {"     ", "     ", "     ", "     ", "     ", "     ", "#####"};
+    static const Glyph apostrophe = {"  #  ", "  #  ", " #   ", "     ", "     ", "     ", "     "};
+    static const Glyph open = {"   # ", "  #  ", " #   ", " #   ", " #   ", "  #  ", "   # "};
+    static const Glyph close = {" #   ", "  #  ", "   # ", "   # ", "   # ", "  #  ", " #   "};
 
     const unsigned char u = static_cast<unsigned char>(c);
     if (std::isdigit(u)) return &digits[c - '0'];
@@ -77,13 +84,37 @@ const Glyph* glyphFor(char c) {
         case ':': return &colon;
         case '-': return &dash;
         case '/': return &slash;
+        case '@': return &at;
+        case '_': return &underscore;
+        case '\'': return &apostrophe;
+        case '(': return &open;
+        case ')': return &close;
         default: return &unknown;
     }
 }
 
 }  // namespace
 
-TextBitmap rasterizeText(const std::string& text, int padding) {
+namespace {
+// One drawable character per UTF-8 sequence: curly quotes (common in iPhone hotspot names) become
+// an apostrophe, any other non-ASCII character a single '?'.
+std::string drawableCharacters(const std::string& text) {
+    std::string out;
+    for (size_t i = 0; i < text.size();) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        if (c < 0x80) { out += text[i++]; continue; }
+        size_t length = (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 1;
+        length = std::min(length, text.size() - i);
+        const std::string sequence = text.substr(i, length);
+        out += sequence == "\xE2\x80\x98" || sequence == "\xE2\x80\x99" ? '\'' : '?';
+        i += length;
+    }
+    return out;
+}
+}  // namespace
+
+TextBitmap rasterizeText(const std::string& source, int padding) {
+    const std::string text = drawableCharacters(source);
     padding = std::max(0, padding);
     TextBitmap bitmap;
     const int count = static_cast<int>(text.size());
@@ -123,14 +154,56 @@ std::vector<std::string> localIpv4Addresses() {
     return result;
 }
 
-std::string bootOverlayText(const std::string& panelId, const std::vector<std::string>& addresses) {
-    std::string text = panelId + "  ";
-    if (addresses.empty()) return text + "no network";
-    for (size_t i = 0; i < addresses.size(); ++i) {
-        if (i > 0) text += "  ";
-        text += addresses[i];
+std::string bootOverlayText(const BootOverlayInfo& info) {
+    std::string text = info.panelId + "  ";
+    if (info.addresses.empty()) {
+        text += "no network";
+    } else {
+        text += "ssh " + (info.loginUser.empty() ? "" : info.loginUser + "@") + info.addresses[0];
+        for (size_t i = 1; i < info.addresses.size(); ++i) text += "  also " + info.addresses[i];
     }
+    if (info.wifi) text += "  wifi: " + (info.wifi->empty() ? std::string("none") : *info.wifi);
     return text;
+}
+
+std::string loginUserName() {
+#if defined(__linux__) || defined(__APPLE__)
+    if (const passwd* entry = getpwuid(1000); entry && entry->pw_name) return entry->pw_name;
+#endif
+    return {};
+}
+
+std::string parseActiveWifi(const std::string& output) {
+    size_t start = 0;
+    while (start < output.size()) {
+        size_t end = output.find('\n', start);
+        if (end == std::string::npos) end = output.size();
+        const std::string line = output.substr(start, end - start);
+        start = end + 1;
+        if (line.rfind("yes:", 0) != 0) continue;
+        std::string ssid;
+        for (size_t i = 4; i < line.size(); ++i) {
+            if (line[i] == '\\' && i + 1 < line.size()) ++i;  // nmcli escapes ':' and '\'
+            ssid += line[i];
+        }
+        return ssid;
+    }
+    return {};
+}
+
+std::optional<std::string> currentWifiName() {
+#if defined(__linux__)
+    FILE* pipe = popen("timeout 3 nmcli -t -f ACTIVE,SSID dev wifi list --rescan no 2>/dev/null", "r");
+    if (!pipe) return std::nullopt;
+    std::string output;
+    char buffer[256];
+    while (size_t n = fread(buffer, 1, sizeof(buffer), pipe)) output.append(buffer, n);
+    const int status = pclose(pipe);
+    if (status != 0 && output.empty()) return std::nullopt;  // nmcli missing or failed
+    return parseActiveWifi(output);
+#else
+    return std::nullopt;
+#endif
 }
 
 float bootOverlayAlpha(double elapsed, double duration, std::optional<double> uptimeAtStart) {
